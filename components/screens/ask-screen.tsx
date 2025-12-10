@@ -14,10 +14,12 @@ interface Message {
 }
 
 const suggestions = [
+  "How do I access situational awareness reports?",
+  "What are the key phases of Mass Care operations?",
   "How do I set up a shelter?",
-  "Client intake process",
-  "Feeding safety protocols",
-  "Volunteer check-in procedures",
+  "What is the client intake process?",
+  "What are the feeding safety protocols?",
+  "How do I handle reunification services?",
 ]
 
 export function AskScreen() {
@@ -92,6 +94,16 @@ export function AskScreen() {
     setInput("")
     setIsLoading(true)
 
+    // Create assistant message placeholder for streaming
+    const assistantMessageId = (Date.now() + 1).toString()
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      sources: ["Red Cross Doctrine"],
+    }
+    setMessages((prev) => [...prev, assistantMessage])
+
     try {
       // Find relevant articles for context
       const relevantContext = findRelevantArticles(messageText)
@@ -108,33 +120,72 @@ export function AskScreen() {
         }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.content || "I'm sorry, I couldn't generate a response.",
-          sources: ["Red Cross Doctrine"],
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-      } else {
-        const errorMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
-        }
-        setMessages((prev) => [...prev, errorMessage])
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
+
+      // Handle streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error("No response body")
+      }
+
+      let accumulatedContent = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n").filter((line) => line.trim())
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6)
+            if (data === "[DONE]") {
+              setIsLoading(false)
+              return
+            }
+
+            try {
+              const json = JSON.parse(data)
+              const content = json.content
+              if (content) {
+                accumulatedContent += content
+                // Update the assistant message with accumulated content
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: accumulatedContent }
+                      : msg
+                  )
+                )
+              }
+            } catch (e) {
+              // Ignore parse errors for comments or invalid JSON
+              console.warn("Failed to parse SSE data:", e, data)
+            }
+          }
+        }
+      }
+
+      setIsLoading(false)
     } catch (error) {
       console.error("Ask AI error:", error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
-      }
-      setMessages((prev) => [...prev, errorMessage])
-    } finally {
       setIsLoading(false)
+      // Update the assistant message with error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
+              }
+            : msg
+        )
+      )
     }
   }
 
@@ -187,6 +238,7 @@ export function AskScreen() {
               onKeyDown={handleKeyDown}
               placeholder="Ask a question..."
               rows={1}
+              autoComplete="off"
               className={cn(
                 "flex-1 px-2 py-2 bg-transparent resize-none",
                 "text-sm text-foreground placeholder:text-muted-foreground",
@@ -276,6 +328,7 @@ export function AskScreen() {
             onKeyDown={handleKeyDown}
             placeholder="Ask a follow-up..."
             rows={1}
+            autoComplete="off"
             className={cn(
               "flex-1 px-2 py-2 bg-transparent resize-none",
               "text-sm text-foreground placeholder:text-muted-foreground",
