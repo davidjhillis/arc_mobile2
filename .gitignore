@@ -1,0 +1,4 @@
+.env.local
+
+# Generated audio files (can be regenerated)
+public/audio/*.mp3
