@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
 import { ArrowUp, Loader2, Sparkles, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { massCareContent } from "@/lib/mass-care-content"
@@ -22,12 +22,35 @@ const suggestions = [
   "How do I handle reunification services?",
 ]
 
-export function AskScreen() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+interface AskScreenProps {
+  initialMessage?: string
+}
+
+export interface AskScreenRef {
+  sendMessage: (text: string) => void
+}
+
+export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
+  ({ initialMessage }, ref) => {
+    const [messages, setMessages] = useState<Message[]>([])
+    const [input, setInput] = useState(initialMessage || "")
+    const [isLoading, setIsLoading] = useState(false)
+    const messagesEndRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
+
+    // Expose sendMessage method via ref
+    useImperativeHandle(ref, () => ({
+      sendMessage: (text: string) => {
+        handleSend(text)
+      },
+    }))
+
+    // Auto-send initial message if provided (e.g., from voice)
+    useEffect(() => {
+      if (initialMessage && initialMessage.trim() && messages.length === 0) {
+        handleSend(initialMessage)
+      }
+    }, [initialMessage])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -351,4 +374,6 @@ export function AskScreen() {
       </div>
     </div>
   )
-}
+})
+
+AskScreen.displayName = "AskScreen"

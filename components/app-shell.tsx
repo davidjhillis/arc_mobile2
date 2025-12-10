@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { MobileNav } from "./mobile-nav"
 import { HomeScreen } from "./screens/home-screen"
 import { DisasterScreen } from "./screens/disaster-screen"
 import { ServicesScreen } from "./screens/services-screen"
-import { AskScreen } from "./screens/ask-screen"
+import { AskScreen, type AskScreenRef } from "./screens/ask-screen"
 import { ProfileScreen } from "./screens/profile-screen"
 import { LoginScreen } from "./screens/login-screen"
 import { DoctrineScreen } from "./screens/doctrine-screen"
@@ -13,6 +13,7 @@ import { GroupDocumentsScreen } from "./screens/group-documents-screen"
 import { DoctrineDetailScreen } from "./screens/doctrine-detail-screen"
 import { FeedScreen } from "./screens/feed-screen"
 import { DownloadsScreen } from "./screens/downloads-screen"
+import { VoiceAgent } from "./voice-agent"
 
 export type Screen =
   | "login"
@@ -33,6 +34,8 @@ export function AppShell() {
   const [selectedDoctrineId, setSelectedDoctrineId] = useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null)
+  const askScreenRef = useRef<AskScreenRef | null>(null)
 
   const handleNavigate = (screen: Screen, disasterType?: string, doctrineId?: string, group?: string) => {
     if (disasterType) {
@@ -75,7 +78,7 @@ export function AppShell() {
       case "services":
         return <ServicesScreen onNavigate={handleNavigate} />
       case "ask":
-        return <AskScreen />
+        return <AskScreen ref={askScreenRef} initialMessage={voiceTranscript || undefined} />
       case "profile":
         return <ProfileScreen onNavigate={handleNavigate} />
       case "feed":
@@ -87,11 +90,63 @@ export function AppShell() {
     }
   }
 
+  const handleVoiceTranscript = (transcript: string) => {
+    // Navigate to ask screen if not already there
+    if (activeScreen !== "ask") {
+      setVoiceTranscript(transcript)
+      handleNavigate("ask")
+    } else {
+      // If already on ask screen, send message directly
+      if (askScreenRef.current) {
+        askScreenRef.current.sendMessage(transcript)
+      } else {
+        // Fallback: set transcript and let AskScreen handle it
+        setVoiceTranscript(transcript)
+      }
+    }
+  }
+  
+  // Clear voice transcript after it's been used
+  useEffect(() => {
+    if (voiceTranscript && activeScreen === "ask") {
+      // Clear after a delay to allow AskScreen to process it
+      const timer = setTimeout(() => {
+        setVoiceTranscript(null)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [voiceTranscript, activeScreen])
+
+  const handleVoiceCommand = (command: string, transcript: string) => {
+    console.log("Voice command:", command, transcript)
+    
+    // Parse commands and navigate accordingly
+    switch (command) {
+      case "find":
+        // Extract article name from transcript and search
+        handleNavigate("ask")
+        break
+      case "read":
+        // Extract article name and navigate to it
+        handleNavigate("ask")
+        break
+      default:
+        // Default: just send to chat
+        handleNavigate("ask")
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-dvh max-w-lg mx-auto bg-background">
       <main className="flex-1 overflow-y-auto pb-20">{renderScreen()}</main>
       {isAuthenticated && activeScreen !== "login" && (
-        <MobileNav activeScreen={activeScreen} onNavigate={(screen) => handleNavigate(screen)} />
+        <>
+          <MobileNav activeScreen={activeScreen} onNavigate={(screen) => handleNavigate(screen)} />
+          <VoiceAgent
+            onTranscript={handleVoiceTranscript}
+            onCommand={handleVoiceCommand}
+          />
+        </>
       )}
     </div>
   )
