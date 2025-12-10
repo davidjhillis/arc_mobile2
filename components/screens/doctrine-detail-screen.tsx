@@ -1228,28 +1228,14 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   }
 
 
-  // Load audio file when listen player opens (uses pre-generated files or generates on-demand)
+  // Load audio file when listen player opens (uses blob storage, checks cache first)
   useEffect(() => {
     if (showListenPlayer && isOnline && !audioUrl && doctrineId) {
       const loadAudio = async () => {
         setAudioLoading(true)
         try {
-          // First, check if static file exists (pre-generated)
-          const staticAudioUrl = `/audio/${doctrineId}.mp3`
-          
-          // Try to fetch the static file
-          const checkResponse = await fetch(staticAudioUrl, { method: "HEAD" })
-          
-          if (checkResponse.ok) {
-            // Static file exists, use it directly (instant playback!)
-            console.log("Using pre-generated audio file:", staticAudioUrl)
-            setAudioUrl(staticAudioUrl)
-            setAudioLoading(false)
-            return
-          }
-
-          // Static file doesn't exist, generate it on-demand via API
-          console.log("Generating audio on-demand for:", doctrineId)
+          // Generate audio via API (API checks blob cache first, then generates if needed)
+          console.log("Loading audio for:", doctrineId)
           
           const response = await fetch("/api/ai/tts", {
             method: "POST",
@@ -1264,6 +1250,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           if (response.ok) {
             const data = await response.json()
             if (data.audioUrl) {
+              console.log("Audio loaded:", data.cached ? "cached" : "generated", data.audioUrl)
               setAudioUrl(data.audioUrl)
             } else {
               throw new Error("No audio URL received from AI TTS service")

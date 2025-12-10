@@ -46,12 +46,17 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
   
   // Save to Vercel Blob in organized folder structure
   const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
-  const { url } = await put(blobName, audioBuffer, {
-    access: 'public',
-    contentType: 'audio/mpeg',
-  })
-  
-  return url
+  try {
+    const { url } = await put(blobName, audioBuffer, {
+      access: 'public',
+      contentType: 'audio/mpeg',
+    })
+    console.log("Audio saved to blob:", url)
+    return url
+  } catch (blobError) {
+    console.error("Blob storage error:", blobError)
+    throw new Error(`Failed to save audio to blob storage: ${blobError instanceof Error ? blobError.message : "Unknown error"}`)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -94,9 +99,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("TTS error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    console.error("TTS error details:", errorMessage)
     return new Response(JSON.stringify({ 
       error: "Failed to generate AI speech",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: errorMessage
     }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
