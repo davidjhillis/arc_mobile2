@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { put, head } from "@vercel/blob"
+import { put, head, list } from "@vercel/blob"
 
 // Get blob token (supports both default BLOB_READ_WRITE_TOKEN and custom arc_READ_WRITE_TOKEN)
 // Vercel Blob SDK can auto-detect tokens when integrated via dashboard, but we'll try to get it explicitly
@@ -102,25 +102,48 @@ export async function POST(request: NextRequest) {
 
     // If doctrineId provided, check if blob already exists
     if (doctrineId) {
+      const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
+      const blobToken = getBlobToken()
+      
+      // First try head() for exact match
       try {
-        const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
-        const blobToken = getBlobToken()
-        
-        // Try to check if blob exists (with or without explicit token)
         const headOptions: any = blobToken ? { token: blobToken } : {}
         const existingBlob = await head(blobName, headOptions)
         
         // Blob exists, return the URL
-        console.log("Found cached audio blob:", existingBlob.url)
+        console.log("Found cached audio blob (head):", existingBlob.url)
         return new Response(JSON.stringify({ 
           audioUrl: existingBlob.url,
           cached: true
         }), {
           headers: { "Content-Type": "application/json" },
         })
-      } catch (error) {
-        // Blob doesn't exist (head throws if not found), will generate below
-        console.log("Blob not found, will generate:", doctrineId, error instanceof Error ? error.message : "")
+      } catch (headError) {
+        // If head() fails, try list() to find by exact pathname match
+        try {
+          const listOptions: any = {
+            prefix: `iph-service-blob/ARC/audio/${doctrineId}.mp3`,
+            ...(blobToken && { token: blobToken }),
+          }
+          const { blobs } = await list(listOptions)
+          
+          // Find exact match (should be only one, but take the most recent)
+          const exactMatch = blobs.find(b => b.pathname === blobName)
+          if (exactMatch) {
+            console.log("Found cached audio blob (list):", exactMatch.url)
+            return new Response(JSON.stringify({ 
+              audioUrl: exactMatch.url,
+              cached: true
+            }), {
+              headers: { "Content-Type": "application/json" },
+            })
+          }
+        } catch (listError) {
+          console.log("List check also failed:", listError instanceof Error ? listError.message : "")
+        }
+        
+        // Blob doesn't exist, will generate below
+        console.log("Blob not found, will generate:", doctrineId)
       }
     }
 
