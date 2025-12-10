@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, BookOpen, Download, ChevronRight, LogOut, WifiOff } from "lucide-react"
+import { Bell, BookOpen, Download, ChevronRight, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
 
@@ -57,26 +57,6 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             </span>
           ))}
         </div>
-      </section>
-
-      <section className="px-5 pb-6">
-        <button
-          onClick={() => onNavigate("downloads")}
-          className={cn(
-            "w-full flex items-center gap-4 p-4 rounded-xl",
-            "bg-emerald-500/10 border border-emerald-500/20",
-            "active:scale-[0.99] transition-all duration-200",
-          )}
-        >
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-            <WifiOff className="w-6 h-6 text-emerald-600" />
-          </div>
-          <div className="flex-1 text-left">
-            <h3 className="text-sm font-medium text-foreground">Offline Content</h3>
-            <p className="text-xs text-muted-foreground">3 doctrine documents saved · 8.3 MB</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-emerald-600" />
-        </button>
       </section>
 
       {/* Divider */}

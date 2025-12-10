@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { ArrowRight, Loader2 } from "lucide-react"
+import { ArrowRight, Loader2, LogIn } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface LoginScreenProps {
@@ -13,6 +13,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isSSOLoading, setIsSSOLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,22 +23,63 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     onLogin()
   }
 
+  const handleSSOLogin = async () => {
+    setIsSSOLoading(true)
+    // In a real implementation, this would redirect to Ping Federated SSO
+    // For now, simulate the SSO flow
+    await new Promise((r) => setTimeout(r, 1000))
+    setIsSSOLoading(false)
+    onLogin()
+  }
+
   return (
     <div className="flex flex-col min-h-dvh">
       {/* Centered content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         {/* Minimal logo mark */}
         <div className="mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 5v14M5 12h14" className="text-primary" strokeLinecap="round" />
-            </svg>
-          </div>
+          <img 
+            src="/American_Red_Cross_logo.svg" 
+            alt="American Red Cross" 
+            className="h-12"
+          />
         </div>
 
         {/* Clean headline */}
-        <h1 className="text-2xl font-medium text-foreground mb-2 tracking-tight">Red Cross Doctrine</h1>
+        <h1 className="text-2xl font-medium text-foreground mb-2 tracking-tight">Disaster Cycle Doctrine</h1>
         <p className="text-muted-foreground text-sm mb-10">Sign in to access volunteer resources</p>
+
+        {/* SSO Login Button */}
+        <div className="w-full max-w-xs mb-6">
+          <button
+            onClick={handleSSOLogin}
+            disabled={isSSOLoading || isLoading}
+            className={cn(
+              "w-full h-12 rounded-xl font-medium text-sm",
+              "bg-primary text-primary-foreground",
+              "flex items-center justify-center gap-2",
+              "active:scale-[0.98] transition-all duration-200",
+              "disabled:opacity-50",
+              "shadow-sm",
+            )}
+          >
+            {isSSOLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <LogIn className="w-4 h-4" />
+                Sign in with SSO
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="w-full max-w-xs flex items-center gap-3 mb-6">
+          <div className="flex-1 h-px bg-border"></div>
+          <span className="text-xs text-muted-foreground">OR</span>
+          <div className="flex-1 h-px bg-border"></div>
+        </div>
 
         {/* Minimal form */}
         <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
@@ -93,11 +135,13 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         <button className="mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors">
           Forgot password?
         </button>
+
+        <p className="mt-8 text-xs text-muted-foreground">Powered by Ping Federated SSO</p>
       </div>
 
       {/* Footer */}
       <div className="p-6 text-center">
-        <p className="text-xs text-muted-foreground">American Red Cross Volunteer Portal</p>
+        <p className="text-xs text-muted-foreground">© American Red Cross</p>
       </div>
     </div>
   )

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import {
   ArrowLeft,
   Bookmark,
@@ -14,10 +14,27 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
+  ChevronDown,
+  List,
+  MessageSquare,
+  Play,
+  Pause,
+  WifiOff,
+  FileText,
+  Headphones,
+  X,
+  SkipBack,
+  SkipForward,
+  Gauge,
+  ThumbsUp,
+  ThumbsDown,
+  Info,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
 import type { JSX } from "react/jsx-runtime" // Import JSX to resolve undeclared variable error
+import { massCareContent } from "@/lib/mass-care-content"
 
 interface DoctrineDetailScreenProps {
   doctrineId: string | null
@@ -817,15 +834,219 @@ No single organization can meet all the needs of fire survivors. Build relations
   },
 }
 
-const defaultDoctrine = doctrineContent["shelter-pet-policy"]
+// Merge mass care content into doctrine content
+const mergedDoctrineContent = {
+  ...doctrineContent,
+  ...Object.fromEntries(
+    Object.entries(massCareContent).map(([key, value]) => [
+      key,
+      {
+        title: value.title,
+        category: value.category,
+        disasterType: value.relatedGroup || "Mass Care",
+        readTime: value.readTime,
+        lastUpdated: value.lastUpdated,
+        version: value.version,
+        summary: value.summary,
+        content: value.content,
+        relatedDocs: value.relatedDocs,
+      },
+    ]),
+  ),
+}
+
+const defaultDoctrine = mergedDoctrineContent["shelter-pet-policy"]
+
+interface TocItem {
+  id: string
+  title: string
+  level: number
+}
 
 export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailScreenProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [readProgress, setReadProgress] = useState(0)
+  const [showToc, setShowToc] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+  const [showSummary, setShowSummary] = useState(false)
+  const [showAskAI, setShowAskAI] = useState(false)
+  const [showListenPlayer, setShowListenPlayer] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [summaryGenerated, setSummaryGenerated] = useState(false)
+  const [aiSummary, setAiSummary] = useState<string>("")
+  const [aiKeyPoints, setAiKeyPoints] = useState<string[]>([])
+  const [askAIQuestion, setAskAIQuestion] = useState("")
+  const [askAIAnswer, setAskAIAnswer] = useState("")
+  const [isAskingAI, setIsAskingAI] = useState(false)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const [audioProgress, setAudioProgress] = useState(0)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  const doctrine = doctrineId ? doctrineContent[doctrineId] || defaultDoctrine : defaultDoctrine
+  const doctrine = doctrineId ? mergedDoctrineContent[doctrineId] || defaultDoctrine : defaultDoctrine
+
+  // Extract TOC from markdown content
+  const extractToc = (content: string): TocItem[] => {
+    const toc: TocItem[] = []
+    const lines = content.split("\n")
+    let h2Index = 0
+    let h3Index = 0
+
+    lines.forEach((line) => {
+      const trimmed = line.trim()
+      if (trimmed.startsWith("## ")) {
+        h2Index++
+        h3Index = 0
+        const title = trimmed.replace("## ", "")
+        const id = `section-${h2Index}`
+        toc.push({ id, title, level: 2 })
+      } else if (trimmed.startsWith("### ")) {
+        h3Index++
+        const title = trimmed.replace("### ", "")
+        const id = `subsection-${h2Index}-${h3Index}`
+        toc.push({ id, title, level: 3 })
+      }
+    })
+
+    return toc
+  }
+
+  const tocItems = extractToc(doctrine.content)
+
+  // Check online status
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
+
+  // Generate AI summary when summary widget is opened (with streaming)
+  useEffect(() => {
+    if (showSummary && doctrine.content && !summaryGenerated) {
+      setSummaryGenerated(true) // Prevent multiple calls
+      setAiSummary("") // Clear summary - don't show legacy content
+      setAiKeyPoints([]) // Clear key points
+      
+      const generateSummary = async () => {
+        try {
+          const response = await fetch("/api/ai/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: doctrine.content }),
+          })
+
+          if (!response.ok) {
+            throw new Error("Summary generation failed")
+          }
+
+          // Handle streaming response
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          let fullText = ""
+
+          if (!reader) {
+            throw new Error("No reader available")
+          }
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            const lines = chunk.split("\n").filter((line) => line.trim())
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6)
+                if (data === "[DONE]") break
+
+                try {
+                  const json = JSON.parse(data)
+                  if (json.content) {
+                    fullText += json.content
+                    // Update summary in real-time as it streams
+                    setAiSummary(fullText)
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+
+          // Parse final summary and key points
+          const lines = fullText.split("\n").filter((line: string) => line.trim())
+          const summaryLines: string[] = []
+          const keyPoints: string[] = []
+          let foundBullets = false
+
+          lines.forEach((line: string) => {
+            const trimmed = line.trim()
+            // Check for bullet points (various formats)
+            if (trimmed.match(/^[-•*]\s/) || trimmed.match(/^\d+\.\s/)) {
+              foundBullets = true
+              const cleaned = trimmed.replace(/^[-•*]\s/, "").replace(/^\d+\.\s/, "").trim()
+              if (cleaned) {
+                keyPoints.push(cleaned)
+              }
+            } else if (trimmed && !foundBullets) {
+              // Text before bullets = summary
+              summaryLines.push(trimmed)
+            } else if (trimmed && foundBullets && !trimmed.match(/^[-•*]/) && !trimmed.match(/^\d+\./)) {
+              // Additional summary text after bullets (shouldn't happen but handle it)
+              if (keyPoints.length === 0) {
+                summaryLines.push(trimmed)
+              }
+            }
+          })
+
+          // Set final parsed content
+          const finalSummary = summaryLines.join(" ").trim() || fullText.split("\n").filter((l: string) => !l.match(/^[-•*]/) && !l.match(/^\d+\./)).join(" ").trim()
+          setAiSummary(finalSummary || "Summary generated")
+          
+          if (keyPoints.length > 0) {
+            setAiKeyPoints(keyPoints)
+          } else {
+            // If no bullets found, try to extract from full text
+            const fallbackBullets = fullText.split("\n")
+              .filter((l: string) => l.trim().match(/^[-•*]/) || l.trim().match(/^\d+\./))
+              .map((l: string) => l.replace(/^[-•*]\s/, "").replace(/^\d+\.\s/, "").trim())
+              .filter((l: string) => l.length > 0)
+            
+            if (fallbackBullets.length > 0) {
+              setAiKeyPoints(fallbackBullets)
+            }
+          }
+        } catch (error) {
+          console.error("Failed to generate summary:", error)
+          setAiSummary("Failed to generate summary. Please try again.")
+          setAiKeyPoints([])
+        }
+      }
+
+      generateSummary()
+    }
+  }, [showSummary, summaryGenerated, doctrine.content])
+
+  // Reset summary when widget is closed
+  useEffect(() => {
+    if (!showSummary) {
+      setSummaryGenerated(false)
+      setAiSummary("")
+      setAiKeyPoints([])
+    }
+  }, [showSummary])
 
   const handleDownload = () => {
     setIsDownloading(true)
@@ -847,6 +1068,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     const elements: JSX.Element[] = []
     let listItems: string[] = []
     let inList = false
+    let h2Index = 0
+    let h3Index = 0
 
     const flushList = () => {
       if (listItems.length > 0) {
@@ -870,10 +1093,24 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
       if (trimmed.startsWith("## ")) {
         flushList()
+        h2Index++
+        h3Index = 0
+        const title = trimmed.replace("## ", "")
+        const id = `section-${h2Index}`
         elements.push(
-          <h2 key={idx} className="text-lg font-semibold text-foreground mt-8 mb-3 first:mt-0">
-            {trimmed.replace("## ", "")}
+          <h2 key={idx} id={id} className="text-lg font-semibold text-foreground mt-8 mb-3 first:mt-0 scroll-mt-20">
+            {title}
           </h2>,
+        )
+      } else if (trimmed.startsWith("### ")) {
+        flushList()
+        h3Index++
+        const title = trimmed.replace("### ", "")
+        const id = `subsection-${h2Index}-${h3Index}`
+        elements.push(
+          <h3 key={idx} id={id} className="text-base font-semibold text-foreground mt-6 mb-2 scroll-mt-20">
+            {title}
+          </h3>,
         )
       } else if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
         flushList()
@@ -915,6 +1152,210 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     return elements
   }
 
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id)
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" })
+      setShowToc(false) // Close mobile TOC after navigation
+    }
+  }
+
+  const handleAskAI = async (question: string) => {
+    if (!question.trim() || isAskingAI) return
+
+    setIsAskingAI(true)
+    setAskAIQuestion(question)
+    setAskAIAnswer("")
+
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: question }],
+          context: `Article Title: ${doctrine.title}\nCategory: ${doctrine.category}\n\n${doctrine.content}`, // Send full article content as context
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Chat request failed")
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let fullAnswer = ""
+
+      if (!reader) {
+        throw new Error("No reader available")
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n").filter((line) => line.trim())
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6)
+            if (data === "[DONE]") break
+
+            try {
+              const json = JSON.parse(data)
+              if (json.content) {
+                fullAnswer += json.content
+                // Update answer in real-time
+                setAskAIAnswer(fullAnswer)
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      if (!fullAnswer) {
+        setAskAIAnswer("I'm sorry, I couldn't generate a response.")
+      }
+    } catch (error) {
+      console.error("Ask AI error:", error)
+      setAskAIAnswer("I'm sorry, I'm having trouble processing your question right now. Please try again later.")
+    } finally {
+      setIsAskingAI(false)
+    }
+  }
+
+
+  // Load audio file when listen player opens (uses pre-generated files or generates on-demand)
+  useEffect(() => {
+    if (showListenPlayer && isOnline && !audioUrl && doctrineId) {
+      const loadAudio = async () => {
+        setAudioLoading(true)
+        try {
+          // First, check if static file exists (pre-generated)
+          const staticAudioUrl = `/audio/${doctrineId}.mp3`
+          
+          // Try to fetch the static file
+          const checkResponse = await fetch(staticAudioUrl, { method: "HEAD" })
+          
+          if (checkResponse.ok) {
+            // Static file exists, use it directly (instant playback!)
+            console.log("Using pre-generated audio file:", staticAudioUrl)
+            setAudioUrl(staticAudioUrl)
+            setAudioLoading(false)
+            return
+          }
+
+          // Static file doesn't exist, generate it on-demand via API
+          console.log("Generating audio on-demand for:", doctrineId)
+          
+          const response = await fetch("/api/ai/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              text: doctrine.content,
+              voice: "nova",
+              doctrineId: doctrineId
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data.audioUrl) {
+              setAudioUrl(data.audioUrl)
+            } else {
+              throw new Error("No audio URL received from AI TTS service")
+            }
+          } else {
+            const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
+            console.error("AI TTS API error:", errorData)
+            throw new Error(errorData.error || errorData.details || "AI TTS service failed")
+          }
+        } catch (error) {
+          console.error("AI TTS error:", error)
+          setAudioLoading(false)
+          alert(`AI TTS failed: ${error instanceof Error ? error.message : "Unknown error"}. Please check your API configuration.`)
+          setShowListenPlayer(false)
+        } finally {
+          setAudioLoading(false)
+        }
+      }
+
+      loadAudio()
+    }
+  }, [showListenPlayer, isOnline, doctrineId, doctrine.content, audioUrl])
+
+  // Reset audio when doctrine changes
+  useEffect(() => {
+    if (doctrineId) {
+      setAudioUrl(null)
+      setAudioCurrentTime(0)
+      setAudioProgress(0)
+      setIsPlaying(false)
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+    }
+  }, [doctrineId])
+
+
+  // Update playback speed when changed
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    audio.playbackRate = playbackSpeed
+  }, [playbackSpeed])
+
+  const togglePlayPause = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) {
+      console.error("Audio element not found")
+      return
+    }
+
+    if (isPlaying) {
+      audio.pause()
+    } else {
+      audio.play().catch((error) => {
+        console.error("Error playing audio:", error)
+        alert("Unable to play audio. Please try again.")
+      })
+    }
+  }, [isPlaying])
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const skipBackward = useCallback(() => {
+    const audio = audioRef.current
+    if (audio && audio.duration) {
+      audio.currentTime = Math.max(0, audio.currentTime - 10)
+    }
+  }, [])
+
+  const skipForward = useCallback(() => {
+    const audio = audioRef.current
+    if (audio && audio.duration) {
+      audio.currentTime = Math.min(audio.duration, audio.currentTime + 10)
+    }
+  }, [])
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current
+    if (!audio || !audio.duration) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const percent = (e.clientX - rect.left) / rect.width
+    audio.currentTime = percent * audio.duration
+  }
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Progress bar */}
@@ -923,7 +1364,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-background border-b border-border">
+      <header className="sticky top-0 z-10 bg-background">
         <div className="px-5 pt-12 pb-4">
           <div className="flex items-center justify-between mb-4">
             <button
@@ -993,6 +1434,483 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         </div>
       </header>
 
+      {/* AI Assists - Above TOC */}
+      <div className="px-5 pt-2 pb-4">
+        <div id="ai-tools-container" className="flex flex-wrap gap-3">
+          <button
+            onClick={() => {
+              if (showSummary) {
+                setShowSummary(false)
+              } else {
+                // Close other widgets
+                setShowListenPlayer(false)
+                setShowAskAI(false)
+                // Reset summary state to allow regeneration
+                setSummaryGenerated(false)
+                setAiSummary("")
+                setAiKeyPoints([])
+                // Open summary
+                setShowSummary(true)
+              }
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 px-5 py-3 bg-muted/50 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              showSummary
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-foreground hover:bg-muted",
+            )}
+          >
+            <Sparkles className={cn("w-4 h-4", showSummary && "text-primary-foreground")} />
+            <span>Summarize</span>
+          </button>
+          <button
+            onClick={() => {
+              if (!isOnline) return
+              if (showListenPlayer) {
+                setShowListenPlayer(false)
+                setIsPlaying(false)
+                setAudioUrl(null)
+                if (audioRef.current) {
+                  audioRef.current.pause()
+                  audioRef.current.currentTime = 0
+                }
+              } else {
+                // Close other widgets
+                setShowSummary(false)
+                setShowAskAI(false)
+                // Open listen player
+                setShowListenPlayer(true)
+              }
+            }}
+            disabled={!isOnline}
+            className={cn(
+              "inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              !isOnline
+                ? "bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed"
+                : showListenPlayer
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "bg-muted/50 text-foreground hover:bg-muted",
+            )}
+          >
+            <Headphones className={cn("w-4 h-4", showListenPlayer && "text-primary-foreground")} />
+            <span>Listen</span>
+          </button>
+          <button
+            onClick={() => {
+              if (showAskAI) {
+                setShowAskAI(false)
+              } else {
+                // Close other widgets
+                setShowSummary(false)
+                setShowListenPlayer(false)
+                // Open ask AI
+                setShowAskAI(true)
+              }
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 px-5 py-3 bg-muted/50 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              showAskAI
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-foreground hover:bg-muted",
+            )}
+          >
+            <MessageSquare className={cn("w-4 h-4", showAskAI && "text-primary-foreground")} />
+            <span>Ask AI</span>
+          </button>
+        </div>
+
+        {/* AI Widgets - Appear directly below buttons */}
+        {showSummary && (
+          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                </div>
+                <h4 className="text-sm font-semibold text-foreground">AI Summary</h4>
+              </div>
+              <button
+                onClick={() => setShowSummary(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {!aiSummary && !summaryGenerated ? (
+              <div className="flex items-center gap-3 py-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                </div>
+                <span className="text-sm text-muted-foreground">Generating summary...</span>
+              </div>
+            ) : (
+              <div>
+                <div className="prose prose-sm max-w-none">
+                  {aiSummary && (
+                    <p className="text-foreground/80 leading-relaxed mb-4">
+                      {aiSummary}
+                    </p>
+                  )}
+                  {aiKeyPoints.length > 0 && (
+                    <>
+                      <h4 className="text-sm font-semibold text-foreground mb-2">Key Points:</h4>
+                      <ul className="space-y-2 mb-4 ml-4">
+                        {aiKeyPoints.map((point, idx) => (
+                          <li key={idx} className="text-sm text-foreground/80 list-disc">
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {!aiSummary && summaryGenerated && (
+                    <p className="text-sm text-muted-foreground">Generating summary...</p>
+                  )}
+                </div>
+                <div className="text-right mb-4">
+                  <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
+                    <Info className="w-3.5 h-3.5" />
+                    <span>About AI-based content</span>
+                  </button>
+                </div>
+                <div className="pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">How was this response?</p>
+                    <div className="flex items-center gap-3">
+                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-green-500 hover:text-green-600 hover:bg-green-50 transition-colors">
+                        <ThumbsUp className="w-4 h-4" />
+                        <span>Yes</span>
+                      </button>
+                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <ThumbsDown className="w-4 h-4" />
+                        <span>No</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showListenPlayer && isOnline && (
+          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Listen to Article</h4>
+                  <p className="text-xs text-muted-foreground">{doctrine.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowListenPlayer(false)
+                  setIsPlaying(false)
+                  setAudioUrl(null)
+                  setAudioCurrentTime(0)
+                  setAudioProgress(0)
+                  if (audioRef.current) {
+                    audioRef.current.pause()
+                    audioRef.current.currentTime = 0
+                  }
+                }}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Loading State */}
+            {audioLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                  <span className="text-sm text-muted-foreground">Preparing audio...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden audio element */}
+            {audioUrl && (
+              <audio
+                ref={audioRef}
+                src={audioUrl}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onLoadedMetadata={() => {
+                  if (audioRef.current?.duration) {
+                    setAudioDuration(audioRef.current.duration)
+                    console.log("Audio loaded, duration:", audioRef.current.duration)
+                  }
+                }}
+                onCanPlay={() => {
+                  console.log("Audio can play")
+                }}
+                onTimeUpdate={() => {
+                  if (audioRef.current) {
+                    setAudioCurrentTime(audioRef.current.currentTime)
+                    if (audioRef.current.duration) {
+                      setAudioProgress((audioRef.current.currentTime / audioRef.current.duration) * 100)
+                    }
+                  }
+                }}
+                onEnded={() => {
+                  setIsPlaying(false)
+                  setAudioCurrentTime(0)
+                  setAudioProgress(0)
+                }}
+                onError={(e) => {
+                  console.error("Audio playback error:", e)
+                  const audio = audioRef.current
+                  if (audio) {
+                    console.error("Audio error details:", audio.error)
+                  }
+                  alert("Error playing audio. Please try again.")
+                  setIsPlaying(false)
+                }}
+                preload="auto"
+                crossOrigin="anonymous"
+              />
+            )}
+
+            {/* Audio Player */}
+            {!audioLoading && audioUrl && (
+              <>
+                {/* Progress Bar */}
+                <div className="mb-4">
+                  <div
+                    onClick={handleProgressClick}
+                    className="w-full bg-muted rounded-full h-2 cursor-pointer"
+                  >
+                    <div
+                      className="bg-gradient-to-r from-blue-600 to-cyan-600 h-2 rounded-full transition-all"
+                      style={{ width: `${audioProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                    <span>{formatTime(audioCurrentTime)}</span>
+                    <span>{formatTime(audioDuration)}</span>
+                  </div>
+                </div>
+
+                {/* Controls */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={togglePlayPause}
+                      className="flex items-center justify-center px-4 py-2.5 rounded-lg border border-border hover:bg-muted transition-all"
+                    >
+                      <div className="w-7 h-7 rounded-full border border-border bg-muted flex items-center justify-center">
+                        {isPlaying ? (
+                          <Pause className="w-4 h-4 text-foreground" />
+                        ) : (
+                          <Play className="w-4 h-4 text-foreground" />
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      onClick={skipBackward}
+                      className="p-2 hover:bg-muted rounded-lg transition-colors"
+                    >
+                      <SkipBack className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button
+                      onClick={skipForward}
+                      className="p-2 hover:bg-muted rounded-lg transition-colors"
+                    >
+                      <SkipForward className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Gauge className="w-4 h-4 text-muted-foreground" />
+                    <select
+                      value={playbackSpeed}
+                      onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                      className="text-xs bg-muted border border-border rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value={1}>1x</option>
+                      <option value={1.25}>1.25x</option>
+                      <option value={1.5}>1.5x</option>
+                      <option value={2}>2x</option>
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Error State */}
+            {!audioLoading && !audioUrl && (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-2">Unable to generate AI audio.</p>
+                <p className="text-xs text-muted-foreground">Please check your API configuration and try again.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showAskAI && (
+          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                </div>
+                <h4 className="text-sm font-semibold text-foreground">Ask about this article</h4>
+              </div>
+              <button
+                onClick={() => setShowAskAI(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Question Input */}
+            <div className="mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={askAIQuestion}
+                  onChange={(e) => setAskAIQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && askAIQuestion.trim() && !isAskingAI) {
+                      e.preventDefault()
+                      handleAskAI(askAIQuestion.trim())
+                    }
+                  }}
+                  placeholder="Ask a question about this article..."
+                  disabled={isAskingAI}
+                  className="flex-1 px-4 py-2.5 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                />
+                <button
+                  onClick={() => {
+                    if (askAIQuestion.trim() && !isAskingAI) {
+                      handleAskAI(askAIQuestion.trim())
+                    }
+                  }}
+                  disabled={isAskingAI || !askAIQuestion.trim()}
+                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all font-semibold text-sm disabled:opacity-50"
+                >
+                  {isAskingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ask"}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Questions */}
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground mb-2">Quick questions:</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleAskAI(`What is ${doctrine.category}?`)}
+                  disabled={isAskingAI}
+                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                  What is {doctrine.category}?
+                </button>
+                <button
+                  onClick={() => handleAskAI("How do I implement this?")}
+                  disabled={isAskingAI}
+                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                  How do I implement this?
+                </button>
+                <button
+                  onClick={() => handleAskAI("What are the key points?")}
+                  disabled={isAskingAI}
+                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                  What are the key points?
+                </button>
+              </div>
+            </div>
+
+            {/* Answer Area */}
+            <div className="pt-4 border-t border-border">
+              {isAskingAI ? (
+                <div className="flex items-center gap-3 py-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                  </div>
+                  <span className="text-sm text-muted-foreground">Thinking...</span>
+                </div>
+              ) : askAIAnswer ? (
+                <div>
+                  <div className="mb-3">
+                    <p className="text-xs text-muted-foreground mb-1">Question:</p>
+                    <p className="text-sm font-medium text-foreground">{askAIQuestion}</p>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">Answer:</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{askAIAnswer}</p>
+                  </div>
+                  <div className="pt-4 border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">Was this answer helpful?</p>
+                      <div className="flex items-center gap-3">
+                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-green-500 hover:text-green-600 hover:bg-green-50 transition-colors">
+                          <ThumbsUp className="w-4 h-4" />
+                          <span>Yes</span>
+                        </button>
+                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <ThumbsDown className="w-4 h-4" />
+                          <span>No</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Ask a question to get started</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TOC Button - Always visible */}
+      {tocItems.length > 0 && (
+        <div className="px-5 pb-4 border-b border-border">
+          <button
+            onClick={() => setShowToc(!showToc)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 border-2 border-border bg-card rounded-lg hover:border-primary transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <List className="w-5 h-5 text-muted-foreground" />
+              <span className="font-medium text-foreground">Table of Contents</span>
+            </div>
+            <ChevronDown className={cn("w-5 h-5 text-muted-foreground transition-transform", showToc && "rotate-180")} />
+          </button>
+          {showToc && (
+            <div className="mt-3 max-h-64 overflow-y-auto">
+              <nav className="space-y-1">
+                {tocItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => scrollToSection(item.id)}
+                    className={cn(
+                      "w-full text-left px-4 py-2 rounded-lg text-sm transition-colors",
+                      item.level === 2
+                        ? "font-medium text-foreground hover:bg-muted"
+                        : "text-muted-foreground hover:bg-muted pl-8",
+                    )}
+                  >
+                    {item.title}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Article content */}
       <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         <div className="px-5 py-6">
@@ -1001,29 +1919,33 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             {doctrine.summary}
           </p>
 
-          {/* Main content */}
-          <article className="prose-mobile">{renderContent(doctrine.content)}</article>
-
-          {/* Ask AI floating button */}
-          <div className="my-8 p-4 bg-primary/5 rounded-2xl border border-primary/10">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Sparkles className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground mb-1">Have questions about this doctrine?</p>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Ask our AI assistant for clarification or specific scenarios.
-                </p>
-                <button
-                  onClick={() => onNavigate("ask")}
-                  className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-full active:scale-[0.99] transition-transform"
-                >
-                  Ask a question
-                </button>
+          {/* Video Player */}
+          {isOnline ? (
+            <div className="mb-8 rounded-xl overflow-hidden border border-border bg-card">
+              <div className="aspect-video w-full">
+                <iframe
+                  className="w-full h-full"
+                  src="https://www.youtube.com/embed/j3-ilgrJPLY?enablejsapi=1&rel=0"
+                  title="American Red Cross Training Video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mb-8 rounded-xl overflow-hidden border border-border bg-card">
+              <div className="aspect-video bg-muted flex items-center justify-center p-6">
+                <div className="text-center">
+                  <WifiOff className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground mb-1">Video unavailable offline</p>
+                  <p className="text-xs text-muted-foreground">This content requires an internet connection</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main content */}
+          <article className="prose-mobile">{renderContent(doctrine.content)}</article>
 
           {/* Related documents */}
           <div className="mt-8 pt-6 border-t border-border">

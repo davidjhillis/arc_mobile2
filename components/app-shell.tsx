@@ -9,6 +9,7 @@ import { AskScreen } from "./screens/ask-screen"
 import { ProfileScreen } from "./screens/profile-screen"
 import { LoginScreen } from "./screens/login-screen"
 import { DoctrineScreen } from "./screens/doctrine-screen"
+import { GroupDocumentsScreen } from "./screens/group-documents-screen"
 import { DoctrineDetailScreen } from "./screens/doctrine-detail-screen"
 import { FeedScreen } from "./screens/feed-screen"
 import { DownloadsScreen } from "./screens/downloads-screen"
@@ -21,6 +22,7 @@ export type Screen =
   | "ask"
   | "profile"
   | "doctrine"
+  | "group-documents"
   | "doctrine-detail"
   | "feed"
   | "downloads"
@@ -29,14 +31,18 @@ export function AppShell() {
   const [activeScreen, setActiveScreen] = useState<Screen>("login")
   const [selectedDisaster, setSelectedDisaster] = useState<string | null>(null)
   const [selectedDoctrineId, setSelectedDoctrineId] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
-  const handleNavigate = (screen: Screen, disasterType?: string, doctrineId?: string) => {
+  const handleNavigate = (screen: Screen, disasterType?: string, doctrineId?: string, group?: string) => {
     if (disasterType) {
       setSelectedDisaster(disasterType)
     }
     if (doctrineId) {
       setSelectedDoctrineId(doctrineId)
+    }
+    if (group) {
+      setSelectedGroup(group)
     }
     setActiveScreen(screen)
   }
@@ -56,6 +62,14 @@ export function AppShell() {
         return <DisasterScreen onNavigate={handleNavigate} />
       case "doctrine":
         return <DoctrineScreen disasterType={selectedDisaster} onNavigate={handleNavigate} />
+      case "group-documents":
+        return (
+          <GroupDocumentsScreen
+            subActivity={selectedDisaster}
+            group={selectedGroup}
+            onNavigate={handleNavigate}
+          />
+        )
       case "doctrine-detail":
         return <DoctrineDetailScreen doctrineId={selectedDoctrineId} onNavigate={handleNavigate} />
       case "services":

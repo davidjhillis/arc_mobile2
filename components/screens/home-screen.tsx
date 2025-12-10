@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Flame, CloudRain, Wind, Mountain, Snowflake, Zap, ChevronRight, Sparkles, WifiOff } from "lucide-react"
+import { Search, Bed, Stethoscope, Users, Truck, BarChart, Handshake, Briefcase, HardHat, ChevronRight, Sparkles, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
 
@@ -8,25 +8,16 @@ interface HomeScreenProps {
   onNavigate: (screen: Screen, disasterType?: string) => void
 }
 
-const disasterTypes = [
-  { id: "fire", icon: Flame, label: "Fire", description: "Wildfires, house fires, burn incidents", docs: 24 },
-  {
-    id: "flood",
-    icon: CloudRain,
-    label: "Flood",
-    description: "Flash floods, river flooding, coastal surge",
-    docs: 18,
-  },
-  { id: "storm", icon: Wind, label: "Storm", description: "Hurricanes, tornadoes, severe weather", docs: 31 },
-  { id: "earthquake", icon: Mountain, label: "Earthquake", description: "Seismic events and aftershocks", docs: 15 },
-  {
-    id: "winter",
-    icon: Snowflake,
-    label: "Winter Storm",
-    description: "Blizzards, ice storms, extreme cold",
-    docs: 12,
-  },
-  { id: "other", icon: Zap, label: "Other Events", description: "Power outages, evacuations, misc", docs: 22 },
+// Assignment sections (these are the tiles)
+const assignments = [
+  { id: "dat-regional-response", icon: HardHat, label: "DAT: Regional Response", description: "Regional response operations", docs: 12 },
+  { id: "mass-care", icon: Bed, label: "Mass Care", description: "Services for shelters and the community", docs: 18 },
+  { id: "client-care", icon: Stethoscope, label: "Client Care", description: "Health, mental health, and spiritual services", docs: 15 },
+  { id: "workforce", icon: Users, label: "Workforce", description: "Services for deployed responders", docs: 10 },
+  { id: "logistics", icon: Truck, label: "Logistics", description: "Material, facility, and equipment resources", docs: 14 },
+  { id: "information-planning", icon: BarChart, label: "Information & Planning", description: "Assessment and operational data", docs: 20 },
+  { id: "external-relations", icon: Handshake, label: "External Relations", description: "Liaison with government and other partners", docs: 8 },
+  { id: "operations-management", icon: Briefcase, label: "Operations Management", description: "Oversight and direction for DROs", docs: 12 },
 ]
 
 const userProfile = {
@@ -87,7 +78,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       <section className="px-4 mb-4">
         <div className="bg-card rounded-3xl p-4 shadow-sm border border-border/50">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">By Disaster Type</h2>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">By Assignment</h2>
             <button
               onClick={() => onNavigate("disasters")}
               className="text-xs text-primary font-semibold flex items-center gap-0.5"
@@ -96,7 +87,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {disasterTypes.map((item) => {
+            {assignments.map((item) => {
               const Icon = item.icon
               return (
                 <button
@@ -121,36 +112,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </div>
       </section>
 
-      <section className="px-4 mb-4">
-        <div className="bg-card rounded-3xl p-4 shadow-sm border border-border/50">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">By Service</h2>
-            <button
-              onClick={() => onNavigate("services")}
-              className="text-xs text-primary font-semibold flex items-center gap-0.5"
-            >
-              View all <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {["Mass Care", "Feeding", "Client Care", "Spiritual Care"].map((service) => (
-              <button
-                key={service}
-                onClick={() => onNavigate("services")}
-                className={cn(
-                  "flex items-center justify-between px-4 py-3.5 rounded-xl",
-                  "bg-muted/50 border border-border/50",
-                  "active:scale-[0.98] transition-all duration-200",
-                )}
-              >
-                <span className="text-sm font-medium text-foreground">{service}</span>
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="px-4 pb-8">
         <div className="bg-card rounded-3xl p-4 shadow-sm border border-border/50 space-y-3">
           <button
@@ -165,7 +126,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <div className="flex-1 text-left">
-              <h3 className="text-sm font-semibold text-foreground">Browse Doctrine Feed</h3>
+              <h3 className="text-sm font-semibold text-foreground">Browse Doctrine Update</h3>
               <p className="text-xs text-muted-foreground">Personalized for your roles</p>
             </div>
             <span className="px-2 py-1 rounded-full bg-primary text-xs font-semibold text-primary-foreground">

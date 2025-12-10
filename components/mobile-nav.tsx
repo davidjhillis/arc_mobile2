@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Layers, Sparkles, User, Compass } from "lucide-react"
+import { Home, Download, Sparkles, User, Compass } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "./app-shell"
 
@@ -13,7 +13,7 @@ const navItems: { id: Screen; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "feed", label: "Feed", icon: Compass },
   { id: "ask", label: "Ask", icon: Sparkles },
-  { id: "services", label: "Services", icon: Layers },
+  { id: "downloads", label: "Downloads", icon: Download },
   { id: "profile", label: "Profile", icon: User },
 ]
 
@@ -26,7 +26,8 @@ export function MobileNav({ activeScreen, onNavigate }: MobileNavProps) {
           const isActive =
             activeScreen === item.id ||
             (activeScreen === "doctrine" && item.id === "home") ||
-            (activeScreen === "downloads" && item.id === "profile")
+            (activeScreen === "group-documents" && item.id === "home") ||
+            (activeScreen === "doctrine-detail" && item.id === "home")
           const isAsk = item.id === "ask"
 
           return (

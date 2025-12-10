@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, Search, BookOpen, Clock, Sparkles } from "lucide-react"
+import { ArrowLeft, Search, BookOpen, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
 
@@ -10,69 +10,37 @@ interface DoctrineScreenProps {
   onNavigate: (screen: Screen, disasterType?: string, doctrineId?: string) => void
 }
 
-const disasterLabels: Record<string, string> = {
-  fire: "Fire Response",
-  flood: "Flood Response",
-  storm: "Storm Response",
-  earthquake: "Earthquake Response",
-  winter: "Winter Storm",
-  other: "General Response",
+const assignmentLabels: Record<string, string> = {
+  "dat-regional-response": "DAT: Regional Response",
+  "mass-care": "Mass Care",
+  "client-care": "Client Care",
+  "workforce": "Workforce",
+  "logistics": "Logistics",
+  "information-planning": "Information & Planning",
+  "external-relations": "External Relations",
+  "operations-management": "Operations Management",
 }
 
-const doctrineByType: Record<string, Array<{ id: string; title: string; category: string; readTime: string }>> = {
-  fire: [
-    {
-      id: "post-fire-support",
-      title: "Support Services After a House Fire",
-      category: "Client Care",
-      readTime: "10 min",
-    },
-    { id: "shelter-setup-fire", title: "Shelter Setup for Fire Evacuees", category: "Sheltering", readTime: "12 min" },
-    { id: "smoke-inhalation", title: "Smoke Inhalation First Aid", category: "Health", readTime: "5 min" },
-    { id: "property-damage", title: "Property Damage Assessment", category: "Recovery", readTime: "10 min" },
-    { id: "volunteer-safety-fire", title: "Volunteer Safety in Fire Zones", category: "Safety", readTime: "6 min" },
-  ],
-  flood: [
-    { id: "flash-flood-protocol", title: "Flash Flood Response Protocol", category: "Emergency", readTime: "7 min" },
-    { id: "water-damage", title: "Water Damage Assessment", category: "Recovery", readTime: "9 min" },
-    { id: "flood-shelter", title: "Flood Shelter Operations", category: "Sheltering", readTime: "11 min" },
-    { id: "contaminated-water", title: "Contaminated Water Safety", category: "Health", readTime: "6 min" },
-  ],
-  storm: [
-    { id: "hurricane-prep", title: "Hurricane Preparedness", category: "Preparation", readTime: "15 min" },
-    { id: "tornado-response", title: "Tornado Response Protocol", category: "Emergency", readTime: "8 min" },
-    { id: "post-storm-survey", title: "Post-Storm Damage Survey", category: "Recovery", readTime: "10 min" },
-    { id: "power-outage", title: "Power Outage Support", category: "Services", readTime: "7 min" },
-  ],
-  earthquake: [
-    { id: "earthquake-immediate", title: "Earthquake Immediate Response", category: "Emergency", readTime: "6 min" },
-    { id: "building-safety", title: "Building Safety Assessment", category: "Safety", readTime: "12 min" },
-    { id: "aftershock-protocols", title: "Aftershock Protocols", category: "Safety", readTime: "5 min" },
-  ],
-  winter: [
-    { id: "warming-center", title: "Warming Center Operations", category: "Sheltering", readTime: "9 min" },
-    { id: "hypothermia-prevention", title: "Hypothermia Prevention", category: "Health", readTime: "7 min" },
-    { id: "ice-storm-response", title: "Ice Storm Response", category: "Emergency", readTime: "8 min" },
-  ],
-  other: [
-    { id: "shelter-pet-policy", title: "Pet Policy in Emergency Shelters", category: "Sheltering", readTime: "6 min" },
-    { id: "shelter-duration", title: "Shelter Stay Duration Policy", category: "Sheltering", readTime: "8 min" },
-    { id: "dietary-restrictions", title: "Supporting Dietary Restrictions", category: "Feeding", readTime: "7 min" },
-    { id: "volunteer-deployment", title: "Volunteer Deployment Basics", category: "Operations", readTime: "8 min" },
-  ],
-}
+// Phases for Mass Care content (matching folder structure)
+const massCarePhases: string[] = [
+  "Operations",
+  "Planning",
+  "Closing",
+]
 
 export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
-  const type = disasterType || "other"
-  const doctrines = doctrineByType[type] || doctrineByType.other
-  const label = disasterLabels[type] || "Response Doctrine"
-
-  const filtered = doctrines.filter(
-    (d) =>
-      d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.category.toLowerCase().includes(searchQuery.toLowerCase()),
+  const assignmentId = disasterType || "mass-care"
+  const label = assignmentLabels[assignmentId] || "Mass Care"
+  
+  // For Mass Care, show phases. For other assignments, show phases as well (content will be filtered)
+  const phases = assignmentId === "mass-care" 
+    ? massCarePhases 
+    : massCarePhases // For now, all assignments show phases (content filtering happens in group-documents screen)
+  
+  const filtered = phases.filter((phase) =>
+    phase.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   return (
@@ -88,7 +56,7 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-medium text-foreground">{label}</h1>
-            <p className="text-xs text-muted-foreground">{filtered.length} documents</p>
+            <p className="text-xs text-muted-foreground">{filtered.length} phases</p>
           </div>
           <button
             onClick={() => onNavigate("ask")}
@@ -117,12 +85,15 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
         </div>
       </header>
 
-      {/* Doctrine List */}
+      {/* Phases List */}
       <div className="flex-1 px-5 pb-6 space-y-2">
-        {filtered.map((doctrine) => (
+        {filtered.map((phase, index) => (
           <button
-            key={doctrine.id}
-            onClick={() => onNavigate("doctrine-detail", undefined, doctrine.id)}
+            key={`${assignmentId}-${index}`}
+            onClick={() => {
+              const phaseId = phase.toLowerCase()
+              onNavigate("group-documents", assignmentId, undefined, phaseId)
+            }}
             className={cn(
               "w-full flex items-start gap-3 p-4 rounded-xl text-left",
               "bg-card border border-border",
@@ -133,13 +104,7 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
               <BookOpen className="w-4 h-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-foreground mb-1.5 leading-snug">{doctrine.title}</h3>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="px-1.5 py-0.5 rounded bg-muted/50">{doctrine.category}</span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {doctrine.readTime}
-                </span>
-              </div>
+              <h3 className="text-sm font-medium text-foreground leading-snug">{phase}</h3>
             </div>
           </button>
         ))}

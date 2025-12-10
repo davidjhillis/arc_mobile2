@@ -4,6 +4,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { ArrowUp, Loader2, Sparkles, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { massCareContent } from "@/lib/mass-care-content"
 
 interface Message {
   id: string
@@ -34,6 +35,49 @@ export function AskScreen() {
     scrollToBottom()
   }, [messages])
 
+  // Find relevant articles based on question
+  const findRelevantArticles = (question: string): string => {
+    const questionLower = question.toLowerCase()
+    const articleScores: Array<{ article: typeof massCareContent[string]; score: number }> = []
+    
+    // Search through all articles for relevant content
+    Object.values(massCareContent).forEach((article) => {
+      const titleLower = article.title.toLowerCase()
+      const summaryLower = article.summary.toLowerCase()
+      const categoryLower = article.category.toLowerCase()
+      const contentLower = article.content.toLowerCase()
+      
+      let score = 0
+      
+      // Check if question keywords match article content
+      const keywords = questionLower.split(/\s+/).filter(word => word.length > 3)
+      
+      keywords.forEach((keyword) => {
+        if (titleLower.includes(keyword)) score += 5 // Title matches are most important
+        if (summaryLower.includes(keyword)) score += 3 // Summary matches are important
+        if (categoryLower.includes(keyword)) score += 2 // Category matches
+        if (contentLower.includes(keyword)) score += 1 // Content matches
+      })
+      
+      // Boost score if question phrase appears in title or summary
+      if (titleLower.includes(questionLower.substring(0, 30))) score += 10
+      if (summaryLower.includes(questionLower.substring(0, 30))) score += 5
+      
+      if (score > 0) {
+        articleScores.push({ article, score })
+      }
+    })
+    
+    // Sort by score and take top 3 most relevant
+    articleScores.sort((a, b) => b.score - a.score)
+    const topArticles = articleScores.slice(0, 3)
+    
+    // Format articles for context
+    return topArticles.map(({ article }) => {
+      return `---\nArticle: ${article.title}\nCategory: ${article.category}\nSummary: ${article.summary}\n\nContent:\n${article.content.substring(0, 4000)}\n---`
+    }).join("\n\n")
+  }
+
   const handleSend = async (text?: string) => {
     const messageText = text || input.trim()
     if (!messageText || isLoading) return
@@ -48,16 +92,50 @@ export function AskScreen() {
     setInput("")
     setIsLoading(true)
 
-    setTimeout(() => {
-      const assistantMessage: Message = {
+    try {
+      // Find relevant articles for context
+      const relevantContext = findRelevantArticles(messageText)
+      
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user", content: messageText },
+          ],
+          context: relevantContext || undefined,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.content || "I'm sorry, I couldn't generate a response.",
+          sources: ["Red Cross Doctrine"],
+        }
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
+        }
+        setMessages((prev) => [...prev, errorMessage])
+      }
+    } catch (error) {
+      console.error("Ask AI error:", error)
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `Based on Red Cross doctrine for "${messageText}":\n\nThe standard protocol involves coordinating with your local chapter and following the established guidelines for your assigned position. Key steps include:\n\n• Complete required check-in procedures\n• Review position-specific checklists\n• Coordinate with your supervisor\n• Document all activities per reporting requirements\n\nWould you like more specific details on any of these areas?`,
-        sources: ["Shelter Operations Guide", "Volunteer Handbook 2024"],
+        content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
       }
-      setMessages((prev) => [...prev, assistantMessage])
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
