@@ -1,16 +1,8 @@
 import { NextRequest } from "next/server"
-import fs from "fs"
-import path from "path"
-
-const AUDIO_DIR = path.join(process.cwd(), "public", "audio")
-
-// Ensure audio directory exists
-if (!fs.existsSync(AUDIO_DIR)) {
-  fs.mkdirSync(AUDIO_DIR, { recursive: true })
-}
+import { put, head } from "@vercel/blob"
 
 /**
- * Generate audio file and save to disk, return file path
+ * Generate audio file and save to Vercel Blob, return blob URL
  */
 async function generateAndSaveAudio(doctrineId: string, text: string, voice: string = "nova"): Promise<string> {
   const openaiApiKey = process.env.OPENAI_API_KEY
@@ -49,12 +41,17 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
     throw new Error(`OpenAI TTS API error: ${errorText}`)
   }
 
-  // Save to disk
+  // Get audio buffer
   const audioBuffer = await response.arrayBuffer()
-  const audioPath = path.join(AUDIO_DIR, `${doctrineId}.mp3`)
-  fs.writeFileSync(audioPath, Buffer.from(audioBuffer))
   
-  return `/audio/${doctrineId}.mp3`
+  // Save to Vercel Blob in organized folder structure
+  const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
+  const { url } = await put(blobName, audioBuffer, {
+    access: 'public',
+    contentType: 'audio/mpeg',
+  })
+  
+  return url
 }
 
 export async function POST(request: NextRequest) {
@@ -68,17 +65,20 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // If doctrineId provided, check if file already exists
+    // If doctrineId provided, check if blob already exists
     if (doctrineId) {
-      const audioPath = path.join(AUDIO_DIR, `${doctrineId}.mp3`)
-      if (fs.existsSync(audioPath)) {
-        // File exists, return the URL
+      try {
+        const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
+        const existingBlob = await head(blobName)
+        // Blob exists, return the URL
         return new Response(JSON.stringify({ 
-          audioUrl: `/audio/${doctrineId}.mp3`,
+          audioUrl: existingBlob.url,
           cached: true
         }), {
           headers: { "Content-Type": "application/json" },
         })
+      } catch (error) {
+        // Blob doesn't exist, will generate below
       }
     }
 

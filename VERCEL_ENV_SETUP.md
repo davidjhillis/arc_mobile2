@@ -18,9 +18,16 @@ Add these environment variables in your Vercel project settings:
   - `/app/api/ai/tts/route.ts`
   - `/scripts/generate-audio-files.ts`
 
+### 3. BLOB_READ_WRITE_TOKEN
+- **Purpose**: Vercel Blob storage token for caching generated audio files
+- **Where to get it**: From your Vercel Blob store settings
+- **Value**: `vercel_blob_rw_3IFpXqk2GnLoll6M_4ECQx6eeXteQ7RFoD4jW9QzIiPIZ5Z` (your token)
+- **Used in**: `/app/api/ai/tts/route.ts`
+- **Note**: This token allows the app to store and retrieve audio files from Vercel Blob storage. It's automatically available in Vercel if Blob is enabled, but you can also set it manually.
+
 ## Optional Environment Variables
 
-### 3. NEXT_PUBLIC_APP_URL
+### 4. NEXT_PUBLIC_APP_URL
 - **Purpose**: Used for HTTP-Referer header in API requests (optional)
 - **Default**: `http://localhost:3000` (development)
 - **Production**: Set to your Vercel deployment URL (e.g., `https://your-app.vercel.app`)
@@ -34,7 +41,7 @@ Add these environment variables in your Vercel project settings:
    - **Value**: Your OpenRouter API key
    - **Environment**: Production, Preview, Development (select all)
    
-   Repeat for `OPENAI_API_KEY` and optionally `NEXT_PUBLIC_APP_URL`
+   Repeat for `OPENAI_API_KEY`, `BLOB_READ_WRITE_TOKEN`, and optionally `NEXT_PUBLIC_APP_URL`
 
 4. After adding variables, redeploy your application for changes to take effect
 
