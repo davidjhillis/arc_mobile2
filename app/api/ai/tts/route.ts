@@ -2,8 +2,16 @@ import { NextRequest } from "next/server"
 import { put, head } from "@vercel/blob"
 
 // Get blob token (supports both default BLOB_READ_WRITE_TOKEN and custom arc_READ_WRITE_TOKEN)
+// Vercel Blob integration may create tokens with different naming conventions
 const getBlobToken = () => {
-  return process.env.BLOB_READ_WRITE_TOKEN || process.env.arc_READ_WRITE_TOKEN
+  // Check all possible token names (case-insensitive check)
+  return (
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    process.env.arc_READ_WRITE_TOKEN ||
+    process.env.ARC_READ_WRITE_TOKEN ||
+    // Also check if Vercel auto-provides it
+    process.env.VERCEL_BLOB_READ_WRITE_TOKEN
+  )
 }
 
 /**
