@@ -2,3 +2,19 @@
 
 # Generated audio files (can be regenerated)
 public/audio/*.mp3
+
+# Next.js build output
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+
+# Lock files (optional - some teams prefer to commit these)
+# package-lock.json
+# pnpm-lock.yaml
+.vercel
+.env*.local

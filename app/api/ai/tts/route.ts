@@ -76,7 +76,11 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
     }
     
     const { url } = await put(blobName, audioBuffer, putOptions)
-    console.log("Audio saved to blob:", url)
+    console.log("Audio saved to blob:", {
+      url,
+      blobName,
+      size: audioBuffer.byteLength
+    })
     return url
   } catch (blobError) {
     console.error("Blob storage error:", blobError)
