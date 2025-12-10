@@ -882,6 +882,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const [isAskingAI, setIsAskingAI] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioLoading, setAudioLoading] = useState(false)
+  const [audioLoadingMessage, setAudioLoadingMessage] = useState("Preparing audio...")
   const [audioProgress, setAudioProgress] = useState(0)
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioCurrentTime, setAudioCurrentTime] = useState(0)
@@ -1233,6 +1234,9 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     if (showListenPlayer && isOnline && !audioUrl && doctrineId) {
       const loadAudio = async () => {
         setAudioLoading(true)
+        setAudioLoadingMessage("Checking cache...")
+        const startTime = Date.now()
+        
         try {
           // Generate audio via API (API checks blob cache first, then generates if needed)
           console.log("Loading audio for:", doctrineId)
@@ -1249,9 +1253,23 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
           if (response.ok) {
             const data = await response.json()
+            const elapsed = Date.now() - startTime
+            
             if (data.audioUrl) {
-              console.log("Audio loaded:", data.cached ? "cached" : "generated", data.audioUrl)
-              setAudioUrl(data.audioUrl)
+              if (data.cached) {
+                console.log(`[Frontend] Audio loaded from cache in ${elapsed}ms:`, data.audioUrl)
+                setAudioLoadingMessage("Loading audio...")
+                // Small delay to show "Loading audio..." message for cached files
+                setTimeout(() => {
+                  setAudioUrl(data.audioUrl)
+                  setAudioLoading(false)
+                }, 100)
+              } else {
+                console.log(`[Frontend] Audio generated in ${elapsed}ms:`, data.audioUrl)
+                setAudioLoadingMessage("Generating audio...")
+                setAudioUrl(data.audioUrl)
+                setAudioLoading(false)
+              }
             } else {
               throw new Error("No audio URL received from AI TTS service")
             }
@@ -1265,8 +1283,6 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           setAudioLoading(false)
           alert(`AI TTS failed: ${error instanceof Error ? error.message : "Unknown error"}. Please check your API configuration.`)
           setShowListenPlayer(false)
-        } finally {
-          setAudioLoading(false)
         }
       }
 
@@ -1618,7 +1634,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               <div className="flex items-center justify-center py-8">
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                  <span className="text-sm text-muted-foreground">Preparing audio...</span>
+                  <span className="text-sm text-muted-foreground">{audioLoadingMessage}</span>
                 </div>
               </div>
             )}

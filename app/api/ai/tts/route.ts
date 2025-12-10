@@ -100,62 +100,59 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // If doctrineId provided, check if blob already exists
+    // If doctrineId provided, check if blob already exists (fast path)
     if (doctrineId) {
       const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
       const blobToken = getBlobToken()
       
-      // First try head() for exact match
+      // Use head() for fastest cache check - it's a lightweight HEAD request
       try {
         const headOptions: any = blobToken ? { token: blobToken } : {}
+        const startTime = Date.now()
         const existingBlob = await head(blobName, headOptions)
+        const elapsed = Date.now() - startTime
         
-        // Blob exists, return the URL
-        console.log("Found cached audio blob (head):", existingBlob.url)
+        // Blob exists, return immediately
+        console.log(`[TTS Cache HIT] Found cached audio in ${elapsed}ms:`, existingBlob.url)
         return new Response(JSON.stringify({ 
           audioUrl: existingBlob.url,
           cached: true
         }), {
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Cache-Status": "HIT",
+            "X-Cache-Time": elapsed.toString()
+          },
         })
       } catch (headError) {
-        // If head() fails, try list() to find by exact pathname match
-        try {
-          const listOptions: any = {
-            prefix: `iph-service-blob/ARC/audio/${doctrineId}.mp3`,
-            ...(blobToken && { token: blobToken }),
-          }
-          const { blobs } = await list(listOptions)
-          
-          // Find exact match (should be only one, but take the most recent)
-          const exactMatch = blobs.find(b => b.pathname === blobName)
-          if (exactMatch) {
-            console.log("Found cached audio blob (list):", exactMatch.url)
-            return new Response(JSON.stringify({ 
-              audioUrl: exactMatch.url,
-              cached: true
-            }), {
-              headers: { "Content-Type": "application/json" },
-            })
-          }
-        } catch (listError) {
-          console.log("List check also failed:", listError instanceof Error ? listError.message : "")
+        // head() throws if blob doesn't exist - this is expected for cache miss
+        // Only log if it's an unexpected error (not 404)
+        const errorMsg = headError instanceof Error ? headError.message : String(headError)
+        if (!errorMsg.includes("404") && !errorMsg.includes("not found")) {
+          console.warn("[TTS Cache] head() check failed (non-404):", errorMsg)
         }
-        
-        // Blob doesn't exist, will generate below
-        console.log("Blob not found, will generate:", doctrineId)
+        console.log(`[TTS Cache MISS] Blob not found, will generate: ${doctrineId}`)
+        // Continue to generation below
       }
     }
 
-    // Generate new audio file
+    // Generate new audio file (cache miss)
     const audioId = doctrineId || `temp_${Date.now()}`
+    const generateStartTime = Date.now()
     const audioUrl = await generateAndSaveAudio(audioId, text, voice)
+    const generateElapsed = Date.now() - generateStartTime
+    
+    console.log(`[TTS Generated] Created new audio in ${generateElapsed}ms:`, audioUrl)
 
     return new Response(JSON.stringify({ 
       audioUrl,
       cached: false
     }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Cache-Status": "MISS",
+        "X-Generate-Time": generateElapsed.toString()
+      },
     })
   } catch (error) {
     console.error("TTS error:", error)
