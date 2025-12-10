@@ -117,10 +117,25 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("TTS error:", error)
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    const errorStack = error instanceof Error ? error.stack : undefined
     console.error("TTS error details:", errorMessage)
+    console.error("TTS error stack:", errorStack)
+    
+    // Log environment variable status (without exposing values)
+    console.log("Environment check:", {
+      hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasBlobToken: !!getBlobToken(),
+      blobTokenSource: process.env.BLOB_READ_WRITE_TOKEN ? "BLOB_READ_WRITE_TOKEN" : process.env.arc_READ_WRITE_TOKEN ? "arc_READ_WRITE_TOKEN" : "none"
+    })
+    
     return new Response(JSON.stringify({ 
       error: "Failed to generate AI speech",
-      details: errorMessage
+      details: errorMessage,
+      // Include more context for debugging (safe to expose)
+      debug: {
+        hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+        hasBlobToken: !!getBlobToken(),
+      }
     }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
