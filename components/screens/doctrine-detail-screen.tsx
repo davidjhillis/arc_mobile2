@@ -1229,10 +1229,21 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   }
 
 
-  // Load audio file when listen player opens (uses blob storage, checks cache first)
+  // Load audio file when listen player opens (uses client-side cache + blob storage)
   useEffect(() => {
     if (showListenPlayer && isOnline && !audioUrl && doctrineId) {
       const loadAudio = async () => {
+        // Check client-side localStorage cache first (instant)
+        const cacheKey = `tts_audio_${doctrineId}`
+        const cachedAudioUrl = localStorage.getItem(cacheKey)
+        
+        if (cachedAudioUrl) {
+          console.log(`[Frontend] Using client-side cached audio URL:`, cachedAudioUrl)
+          setAudioUrl(cachedAudioUrl)
+          setAudioLoading(false)
+          return
+        }
+        
         setAudioLoading(true)
         setAudioLoadingMessage("Checking cache...")
         const startTime = Date.now()
@@ -1256,8 +1267,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             const elapsed = Date.now() - startTime
             
             if (data.audioUrl) {
+              // Cache the URL in localStorage for future use
+              localStorage.setItem(cacheKey, data.audioUrl)
+              
               if (data.cached) {
-                console.log(`[Frontend] Audio loaded from cache in ${elapsed}ms:`, data.audioUrl)
+                console.log(`[Frontend] Audio loaded from server cache in ${elapsed}ms:`, data.audioUrl)
                 setAudioLoadingMessage("Loading audio...")
                 // Small delay to show "Loading audio..." message for cached files
                 setTimeout(() => {

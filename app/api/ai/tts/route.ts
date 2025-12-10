@@ -100,16 +100,23 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // If doctrineId provided, check if blob already exists (fast path)
+    // If doctrineId provided, check if blob already exists (fast path with timeout)
     if (doctrineId) {
       const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
       const blobToken = getBlobToken()
       
-      // Use head() for fastest cache check - it's a lightweight HEAD request
+      // Use head() with timeout to prevent hanging
       try {
         const headOptions: any = blobToken ? { token: blobToken } : {}
         const startTime = Date.now()
-        const existingBlob = await head(blobName, headOptions)
+        
+        // Add timeout wrapper - if head() takes more than 2 seconds, skip cache check
+        const headPromise = head(blobName, headOptions)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Cache check timeout")), 2000)
+        )
+        
+        const existingBlob = await Promise.race([headPromise, timeoutPromise]) as Awaited<ReturnType<typeof head>>
         const elapsed = Date.now() - startTime
         
         // Blob exists, return immediately
@@ -125,13 +132,18 @@ export async function POST(request: NextRequest) {
           },
         })
       } catch (headError) {
-        // head() throws if blob doesn't exist - this is expected for cache miss
-        // Only log if it's an unexpected error (not 404)
+        // head() throws if blob doesn't exist OR if timeout occurred
         const errorMsg = headError instanceof Error ? headError.message : String(headError)
-        if (!errorMsg.includes("404") && !errorMsg.includes("not found")) {
+        const isTimeout = errorMsg.includes("timeout") || errorMsg.includes("Timeout")
+        
+        if (isTimeout) {
+          console.warn(`[TTS Cache] head() check timed out after 2s, skipping cache check for: ${doctrineId}`)
+          // On timeout, skip cache and generate directly (better UX than waiting)
+        } else if (!errorMsg.includes("404") && !errorMsg.includes("not found")) {
           console.warn("[TTS Cache] head() check failed (non-404):", errorMsg)
+        } else {
+          console.log(`[TTS Cache MISS] Blob not found, will generate: ${doctrineId}`)
         }
-        console.log(`[TTS Cache MISS] Blob not found, will generate: ${doctrineId}`)
         // Continue to generation below
       }
     }
