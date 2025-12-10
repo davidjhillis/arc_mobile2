@@ -2,14 +2,13 @@ import { NextRequest } from "next/server"
 import { put, head } from "@vercel/blob"
 
 // Get blob token (supports both default BLOB_READ_WRITE_TOKEN and custom arc_READ_WRITE_TOKEN)
-// Vercel Blob integration may create tokens with different naming conventions
+// Vercel Blob SDK can auto-detect tokens when integrated via dashboard, but we'll try to get it explicitly
 const getBlobToken = () => {
-  // Check all possible token names (case-insensitive check)
+  // Check all possible token names
   return (
     process.env.BLOB_READ_WRITE_TOKEN ||
     process.env.arc_READ_WRITE_TOKEN ||
     process.env.ARC_READ_WRITE_TOKEN ||
-    // Also check if Vercel auto-provides it
     process.env.VERCEL_BLOB_READ_WRITE_TOKEN
   )
 }
@@ -61,21 +60,28 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
   const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
   const blobToken = getBlobToken()
   
-  if (!blobToken) {
-    throw new Error("Blob storage token not configured. Please set BLOB_READ_WRITE_TOKEN or arc_READ_WRITE_TOKEN")
-  }
-  
   try {
-    const { url } = await put(blobName, audioBuffer, {
+    // Vercel Blob SDK can auto-detect token when integrated via dashboard
+    // Only pass token explicitly if we have it, otherwise let SDK auto-detect
+    const putOptions: any = {
       access: 'public',
       contentType: 'audio/mpeg',
-      token: blobToken,
-    })
+    }
+    
+    if (blobToken) {
+      putOptions.token = blobToken
+      console.log("Using explicit blob token")
+    } else {
+      console.log("Relying on Vercel Blob SDK auto-detection")
+    }
+    
+    const { url } = await put(blobName, audioBuffer, putOptions)
     console.log("Audio saved to blob:", url)
     return url
   } catch (blobError) {
     console.error("Blob storage error:", blobError)
-    throw new Error(`Failed to save audio to blob storage: ${blobError instanceof Error ? blobError.message : "Unknown error"}`)
+    const errorMsg = blobError instanceof Error ? blobError.message : "Unknown error"
+    throw new Error(`Failed to save audio to blob storage: ${errorMsg}. ${blobToken ? 'Token provided.' : 'No token found - ensure Blob is integrated in Vercel dashboard.'}`)
   }
 }
 
@@ -95,19 +101,21 @@ export async function POST(request: NextRequest) {
       try {
         const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
         const blobToken = getBlobToken()
-        if (blobToken) {
-          const existingBlob = await head(blobName, { token: blobToken })
-          // Blob exists, return the URL
-          console.log("Found cached audio blob:", existingBlob.url)
-          return new Response(JSON.stringify({ 
-            audioUrl: existingBlob.url,
-            cached: true
-          }), {
-            headers: { "Content-Type": "application/json" },
-          })
-        }
+        
+        // Try to check if blob exists (with or without explicit token)
+        const headOptions: any = blobToken ? { token: blobToken } : {}
+        const existingBlob = await head(blobName, headOptions)
+        
+        // Blob exists, return the URL
+        console.log("Found cached audio blob:", existingBlob.url)
+        return new Response(JSON.stringify({ 
+          audioUrl: existingBlob.url,
+          cached: true
+        }), {
+          headers: { "Content-Type": "application/json" },
+        })
       } catch (error) {
-        // Blob doesn't exist, will generate below
+        // Blob doesn't exist (head throws if not found), will generate below
         console.log("Blob not found, will generate:", doctrineId, error instanceof Error ? error.message : "")
       }
     }
@@ -150,3 +158,4 @@ export async function POST(request: NextRequest) {
     })
   }
 }
+
