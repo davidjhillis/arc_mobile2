@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 import { put, head } from "@vercel/blob"
 
+// Get blob token (supports both default BLOB_READ_WRITE_TOKEN and custom arc_READ_WRITE_TOKEN)
+const getBlobToken = () => {
+  return process.env.BLOB_READ_WRITE_TOKEN || process.env.arc_READ_WRITE_TOKEN
+}
+
 /**
  * Generate audio file and save to Vercel Blob, return blob URL
  */
@@ -46,10 +51,17 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
   
   // Save to Vercel Blob in organized folder structure
   const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
+  const blobToken = getBlobToken()
+  
+  if (!blobToken) {
+    throw new Error("Blob storage token not configured. Please set BLOB_READ_WRITE_TOKEN or arc_READ_WRITE_TOKEN")
+  }
+  
   try {
     const { url } = await put(blobName, audioBuffer, {
       access: 'public',
       contentType: 'audio/mpeg',
+      token: blobToken,
     })
     console.log("Audio saved to blob:", url)
     return url
@@ -74,16 +86,21 @@ export async function POST(request: NextRequest) {
     if (doctrineId) {
       try {
         const blobName = `iph-service-blob/ARC/audio/${doctrineId}.mp3`
-        const existingBlob = await head(blobName)
-        // Blob exists, return the URL
-        return new Response(JSON.stringify({ 
-          audioUrl: existingBlob.url,
-          cached: true
-        }), {
-          headers: { "Content-Type": "application/json" },
-        })
+        const blobToken = getBlobToken()
+        if (blobToken) {
+          const existingBlob = await head(blobName, { token: blobToken })
+          // Blob exists, return the URL
+          console.log("Found cached audio blob:", existingBlob.url)
+          return new Response(JSON.stringify({ 
+            audioUrl: existingBlob.url,
+            cached: true
+          }), {
+            headers: { "Content-Type": "application/json" },
+          })
+        }
       } catch (error) {
         // Blob doesn't exist, will generate below
+        console.log("Blob not found, will generate:", doctrineId, error instanceof Error ? error.message : "")
       }
     }
 
