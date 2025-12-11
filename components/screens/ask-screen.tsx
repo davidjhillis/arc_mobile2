@@ -122,15 +122,20 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     }
   }, [initialMessage])
 
-  // Check if input is a greeting (not a question)
-  const isGreeting = (text: string): boolean => {
+  // Check if input is a greeting (not a question) - only for first user message
+  const isGreeting = (text: string, isFirstUserMessage: boolean): boolean => {
+    // Only treat as greeting if it's the first user message
+    if (!isFirstUserMessage) return false
+    
     const greetingPatterns = [
-      /^(hi|hello|hey|greetings|good morning|good afternoon|good evening)/i,
-      /^(thanks|thank you|thx)/i,
-      /^(bye|goodbye|see you)/i,
-      /^(how are you|how's it going|what's up)/i,
+      /^(hi|hello|hey|greetings|good morning|good afternoon|good evening)$/i,
+      /^(thanks|thank you|thx)$/i,
+      /^(bye|goodbye|see you)$/i,
+      /^(how are you|how's it going|what's up)$/i,
     ]
-    return greetingPatterns.some(pattern => pattern.test(text.trim()))
+    // Only match if it's JUST a greeting, not a greeting + question
+    const trimmed = text.trim()
+    return greetingPatterns.some(pattern => pattern.test(trimmed)) && trimmed.length < 30
   }
 
   // Extract suggested actions from AI response
@@ -165,12 +170,35 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     }
   }
 
-  // Split text into ~75 word chunks (approximately 5 seconds of speech)
+  // Split text into ~75 word chunks at sentence boundaries (approximately 5 seconds of speech)
   const splitTextForTTS = (text: string): { short: string; remaining: string } => {
+    // Split by sentences first
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
     const words = text.split(/\s+/)
-    const shortWordCount = 75 // ~5 seconds at normal speaking pace
-    const shortText = words.slice(0, shortWordCount).join(" ")
-    const remaining = words.slice(shortWordCount).join(" ")
+    const targetWordCount = 75 // ~5 seconds
+    
+    // If text is short enough, return it all
+    if (words.length <= targetWordCount) {
+      return { short: text, remaining: "" }
+    }
+    
+    // Build short version sentence by sentence until we hit ~75 words
+    let shortSentences: string[] = []
+    let wordCount = 0
+    
+    for (const sentence of sentences) {
+      const sentenceWords = sentence.split(/\s+/).length
+      if (wordCount + sentenceWords <= targetWordCount) {
+        shortSentences.push(sentence)
+        wordCount += sentenceWords
+      } else {
+        break
+      }
+    }
+    
+    const shortText = shortSentences.join(" ").trim()
+    const remaining = sentences.slice(shortSentences.length).join(" ").trim()
+    
     return { short: shortText, remaining }
   }
 
@@ -326,12 +354,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       content: messageText,
     }
 
+    // Check if this is the first user message
+    const isFirstUserMessage = messages.filter(m => m.role === "user").length === 0
+    
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
 
-    // Check if it's a greeting - respond conversationally without searching doctrine
-    if (isGreeting(messageText)) {
+    // Check if it's a greeting - only for first user message, respond conversationally without searching doctrine
+    if (isGreeting(messageText, isFirstUserMessage)) {
       const greetingResponse = "Hello! I'm here to help you with Red Cross doctrine and procedures. How may I help you today?"
       
       const greetingReply: Message = {
@@ -413,13 +444,14 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 // Extract actions from content
                 const extractedActions = extractActions(accumulatedContent)
                 
-                // Update the assistant message with accumulated content
+                // Update the assistant message with accumulated content (ensure it's always visible)
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
                       ? { 
                           ...msg, 
-                          content: accumulatedContent, 
+                          content: accumulatedContent, // Always show full content as it streams
+                          fullContent: accumulatedContent,
                           sources: responseSources.length > 0 ? responseSources : undefined,
                           actions: extractedActions.length > 0 ? extractedActions : undefined,
                         }
