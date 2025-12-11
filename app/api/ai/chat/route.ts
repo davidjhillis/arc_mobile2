@@ -22,7 +22,9 @@ IMPORTANT INSTRUCTIONS:
 2. Reference specific procedures, guidelines, and information from the articles when answering
 3. When referencing information from articles, mention the article title in your response
 4. If the question cannot be answered from the provided context, say so clearly rather than making up information
-5. Be concise and practical - volunteers need quick, actionable answers`
+5. Be concise and practical - volunteers need quick, actionable answers
+6. After answering, suggest 2-3 follow-up questions or actions using bullet points (•) that the user might want to explore next
+7. Format suggestions as questions or action phrases that are clear and clickable (e.g., "• How do I set up a shelter?" or "• Find information about feeding protocols")`
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",

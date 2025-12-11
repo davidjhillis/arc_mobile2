@@ -121,6 +121,38 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     return greetingPatterns.some(pattern => pattern.test(text.trim()))
   }
 
+  // Extract suggested actions from AI response
+  const extractActions = (content: string): string[] => {
+    const actions: string[] = []
+    // Look for bullet points or numbered lists that could be actions
+    const lines = content.split('\n')
+    for (const line of lines) {
+      // Match bullet points (•, -, *) followed by questions or action phrases
+      const bulletMatch = line.match(/^[\s]*[•\-\*]\s*(.+)$/)
+      if (bulletMatch) {
+        const action = bulletMatch[1].trim()
+        // Only include if it looks like a question or action
+        if (action.length > 10 && action.length < 100) {
+          actions.push(action)
+        }
+      }
+    }
+    return actions.slice(0, 4) // Limit to 4 actions
+  }
+
+  // Handle action button click
+  const handleActionClick = (action: string, useVoice: boolean = false) => {
+    if (useVoice && isVoiceSupported) {
+      // Set input and trigger voice
+      setInput(action)
+      setIsVoiceActive(true)
+      startListening()
+    } else {
+      // Send as text message
+      handleSend(action)
+    }
+  }
+
   // Play TTS for AI response
   const playAudioResponse = async (text: string) => {
     try {
@@ -241,6 +273,11 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         role: "assistant",
         content: randomResponse,
         sources: undefined,
+        actions: [
+          "How do I set up a shelter?",
+          "What are Mass Care operations?",
+          "Find information about feeding protocols",
+        ],
       }
       
       setMessages((prev) => [...prev, greetingReply])
@@ -306,11 +343,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               const content = json.content
               if (content) {
                 accumulatedContent += content
+                // Extract actions from content
+                const extractedActions = extractActions(accumulatedContent)
+                
                 // Update the assistant message with accumulated content
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
-                      ? { ...msg, content: accumulatedContent, sources: responseSources.length > 0 ? responseSources : undefined }
+                      ? { 
+                          ...msg, 
+                          content: accumulatedContent, 
+                          sources: responseSources.length > 0 ? responseSources : undefined,
+                          actions: extractedActions.length > 0 ? extractedActions : undefined,
+                        }
                       : msg
                   )
                 )
@@ -324,6 +369,18 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       }
 
       setIsLoading(false)
+      
+      // Extract actions from final content and update message
+      const finalActions = extractActions(accumulatedContent)
+      if (finalActions.length > 0) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, actions: finalActions }
+              : msg
+          )
+        )
+      }
       
       // Play TTS for final response after streaming completes
       if (accumulatedContent.trim()) {
@@ -488,6 +545,43 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                      {/* Action buttons */}
+                      {message.actions && message.actions.length > 0 && (
+                        <div className="flex flex-col gap-2 mt-4">
+                          <span className="text-xs text-muted-foreground font-medium">Suggested actions:</span>
+                          <div className="flex flex-col gap-2">
+                            {message.actions.map((action, idx) => (
+                              <div key={idx} className="flex gap-2">
+                                <button
+                                  onClick={() => handleActionClick(action, false)}
+                                  className={cn(
+                                    "flex-1 px-3 py-2 rounded-lg text-left text-sm",
+                                    "bg-primary/10 text-primary border border-primary/20",
+                                    "hover:bg-primary/20 active:scale-[0.98] transition-all",
+                                  )}
+                                >
+                                  {action}
+                                </button>
+                                {isVoiceSupported && (
+                                  <button
+                                    onClick={() => handleActionClick(action, true)}
+                                    className={cn(
+                                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                                      "bg-primary/10 text-primary border border-primary/20",
+                                      "hover:bg-primary/20 active:scale-[0.98] transition-all",
+                                    )}
+                                    title="Say this with voice"
+                                  >
+                                    <Mic className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Source links */}
                       {message.sources && message.sources.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-3">
                           <span className="text-[10px] text-muted-foreground">Sources:</span>
