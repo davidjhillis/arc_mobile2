@@ -17,7 +17,12 @@ export async function POST(request: NextRequest) {
 
 ${context ? `Relevant Red Cross doctrine articles and content:\n${context}\n\n` : "You have access to general Red Cross doctrine knowledge. "}
 
-IMPORTANT: Use the provided article content above to answer questions accurately. Reference specific procedures, guidelines, and information from the articles when answering. If the question cannot be answered from the provided context, say so clearly rather than making up information.`
+IMPORTANT INSTRUCTIONS:
+1. Use the provided article content above to answer questions accurately
+2. Reference specific procedures, guidelines, and information from the articles when answering
+3. When referencing information from articles, mention the article title in your response
+4. If the question cannot be answered from the provided context, say so clearly rather than making up information
+5. Be concise and practical - volunteers need quick, actionable answers`
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",

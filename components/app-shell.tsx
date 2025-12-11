@@ -77,7 +77,7 @@ export function AppShell() {
       case "services":
         return <ServicesScreen onNavigate={handleNavigate} />
       case "ask":
-        return <AskScreen ref={askScreenRef} initialMessage={voiceTranscript || undefined} />
+        return <AskScreen ref={askScreenRef} initialMessage={voiceTranscript || undefined} onNavigate={handleNavigate} />
       case "profile":
         return <ProfileScreen onNavigate={handleNavigate} />
       case "feed":

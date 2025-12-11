@@ -421,12 +421,47 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       {/* Input bar - fixed at bottom */}
       <div className="p-4 pb-6 border-t border-border bg-background">
         <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
+          {/* Voice input button */}
+          {isVoiceSupported && (
+            <button
+              onClick={() => {
+                if (isListening) {
+                  stopListening()
+                  setIsVoiceActive(false)
+                  resetVoice()
+                } else {
+                  setIsVoiceActive(true)
+                  startListening()
+                }
+              }}
+              className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                "transition-all duration-200",
+                isListening
+                  ? "bg-primary text-primary-foreground animate-pulse"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+              )}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              {isListening ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+            </button>
+          )}
+          {/* Voice transcript display */}
+          {(isListening || transcript || interimTranscript) && (
+            <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
+              {transcript || interimTranscript || "Listening..."}
+            </div>
+          )}
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a follow-up..."
+            placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
             rows={1}
             autoComplete="off"
             className={cn(
@@ -434,15 +469,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               "text-sm text-foreground placeholder:text-muted-foreground",
               "focus:outline-none",
               "max-h-24",
+              isListening && "opacity-50",
             )}
+            disabled={isListening}
           />
           <button
             onClick={() => handleSend()}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || isListening}
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
               "transition-all duration-200",
-              input.trim() && !isLoading ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              input.trim() && !isLoading && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
             )}
           >
             <ArrowUp className="w-4 h-4" />
