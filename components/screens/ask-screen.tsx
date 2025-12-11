@@ -441,7 +441,30 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           if (line.startsWith("data: ")) {
             const data = line.slice(6)
             if (data === "[DONE]") {
+              // Final update before ending
+              if (accumulatedContent.trim()) {
+                const finalActions = extractActions(accumulatedContent)
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? {
+                          ...msg,
+                          content: accumulatedContent,
+                          fullContent: accumulatedContent,
+                          sources: responseSources.length > 0 ? responseSources : undefined,
+                          actions: finalActions.length > 0 ? finalActions : undefined,
+                        }
+                      : msg
+                  )
+                )
+              }
               setIsLoading(false)
+              // Play TTS after streaming completes
+              if (accumulatedContent.trim()) {
+                setTimeout(async () => {
+                  await playAudioResponse(accumulatedContent, assistantMessageId)
+                }, 300)
+              }
               return
             }
 
