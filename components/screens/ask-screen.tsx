@@ -12,6 +12,7 @@ interface Message {
   role: "user" | "assistant"
   content: string
   sources?: Array<{ id: string; title: string }>
+  actions?: string[] // Suggested action buttons
 }
 
 const suggestions = [
