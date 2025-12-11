@@ -390,6 +390,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     const assistantMessageId = (Date.now() + 1).toString()
     let responseSources: Array<{ id: string; title: string }> = []
     
+    // Create placeholder message immediately so it shows in chat
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      sources: undefined,
+    }
+    setMessages((prev) => [...prev, assistantMessage])
+    
     try {
       // Find relevant articles for context (only for actual questions)
       const { context: relevantContext, sources } = findRelevantArticles(messageText)
