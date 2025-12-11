@@ -11,8 +11,10 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  fullContent?: string // Full content if truncated for TTS
   sources?: Array<{ id: string; title: string }>
   actions?: string[] // Suggested action buttons
+  hasMore?: boolean // Whether there's more content to hear
 }
 
 const suggestions = [

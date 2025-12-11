@@ -40,11 +40,11 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
       Authorization: `Bearer ${openaiApiKey}`,
     },
     body: JSON.stringify({
-      model: "tts-1-hd",
+      model: "tts-1", // Use faster model for speed (tts-1 instead of tts-1-hd)
       input: cleanText,
       voice: voice,
       response_format: "mp3",
-      speed: 1.0,
+      speed: 1.1, // Slightly faster for more natural pace
     }),
   })
 
