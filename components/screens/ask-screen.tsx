@@ -2,15 +2,16 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
-import { ArrowUp, Loader2, Sparkles, BookOpen } from "lucide-react"
+import { ArrowUp, Loader2, Sparkles, BookOpen, Mic, MicOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { massCareContent } from "@/lib/mass-care-content"
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 
 interface Message {
   id: string
   role: "user" | "assistant"
   content: string
-  sources?: string[]
+  sources?: Array<{ id: string; title: string }>
 }
 
 const suggestions = [
@@ -24,6 +25,7 @@ const suggestions = [
 
 interface AskScreenProps {
   initialMessage?: string
+  onNavigate?: (screen: string, doctrineId?: string) => void
 }
 
 export interface AskScreenRef {
@@ -31,12 +33,36 @@ export interface AskScreenRef {
 }
 
 export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
-  ({ initialMessage }, ref) => {
+  ({ initialMessage, onNavigate }, ref) => {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState(initialMessage || "")
-    const [isLoading, setIsLoading] = useState(false)
-    const messagesEndRef = useRef<HTMLDivElement>(null)
-    const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isVoiceActive, setIsVoiceActive] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Voice recognition for Ask screen
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    isSupported: isVoiceSupported,
+    startListening,
+    stopListening,
+    reset: resetVoice,
+  } = useSpeechRecognition({
+    onResult: (fullTranscript, isFinal) => {
+      if (isFinal && fullTranscript.trim()) {
+        setInput(fullTranscript.trim())
+        setIsVoiceActive(false)
+        stopListening()
+        // Auto-send after a brief delay
+        setTimeout(() => {
+          handleSend(fullTranscript.trim())
+        }, 300)
+      }
+    },
+  })
 
     // Expose sendMessage method via ref
     useImperativeHandle(ref, () => ({
@@ -60,13 +86,13 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     scrollToBottom()
   }, [messages])
 
-  // Find relevant articles based on question
-  const findRelevantArticles = (question: string): string => {
+  // Find relevant articles based on question - returns both context string and metadata
+  const findRelevantArticles = (question: string): { context: string; sources: Array<{ id: string; title: string }> } => {
     const questionLower = question.toLowerCase()
     const articleScores: Array<{ article: typeof massCareContent[string]; score: number }> = []
     
     // Search through all articles for relevant content
-    Object.values(massCareContent).forEach((article) => {
+    Object.entries(massCareContent).forEach(([id, article]) => {
       const titleLower = article.title.toLowerCase()
       const summaryLower = article.summary.toLowerCase()
       const categoryLower = article.category.toLowerCase()
@@ -89,7 +115,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       if (summaryLower.includes(questionLower.substring(0, 30))) score += 5
       
       if (score > 0) {
-        articleScores.push({ article, score })
+        articleScores.push({ article: { ...article, id }, score })
       }
     })
     
@@ -98,9 +124,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     const topArticles = articleScores.slice(0, 3)
     
     // Format articles for context
-    return topArticles.map(({ article }) => {
+    const context = topArticles.map(({ article }) => {
       return `---\nArticle: ${article.title}\nCategory: ${article.category}\nSummary: ${article.summary}\n\nContent:\n${article.content.substring(0, 4000)}\n---`
     }).join("\n\n")
+    
+    // Extract source metadata
+    const sources = topArticles.map(({ article }) => ({
+      id: article.id || "",
+      title: article.title
+    }))
+    
+    return { context, sources }
   }
 
   const handleSend = async (text?: string) => {
@@ -123,13 +157,13 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       id: assistantMessageId,
       role: "assistant",
       content: "",
-      sources: ["Red Cross Doctrine"],
+      sources: sources.length > 0 ? sources : undefined,
     }
     setMessages((prev) => [...prev, assistantMessage])
 
     try {
       // Find relevant articles for context
-      const relevantContext = findRelevantArticles(messageText)
+      const { context: relevantContext, sources } = findRelevantArticles(messageText)
       
       const response = await fetch("/api/ai/chat", {
         method: "POST",
@@ -254,12 +288,46 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         {/* Input bar */}
         <div className="p-4 pb-6">
           <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
+            {/* Voice input button */}
+            {isVoiceSupported && (
+              <button
+                onClick={() => {
+                  if (isListening) {
+                    stopListening()
+                    setIsVoiceActive(false)
+                  } else {
+                    setIsVoiceActive(true)
+                    startListening()
+                  }
+                }}
+                className={cn(
+                  "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                  "transition-all duration-200",
+                  isListening
+                    ? "bg-primary text-primary-foreground animate-pulse"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                )}
+                title={isListening ? "Stop listening" : "Start voice input"}
+              >
+                {isListening ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </button>
+            )}
+            {/* Voice transcript display */}
+            {(isListening || transcript || interimTranscript) && (
+              <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
+                {transcript || interimTranscript || "Listening..."}
+              </div>
+            )}
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a question..."
+              placeholder={isListening ? "Listening..." : "Ask a question..."}
               rows={1}
               autoComplete="off"
               className={cn(
@@ -267,15 +335,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 "text-sm text-foreground placeholder:text-muted-foreground",
                 "focus:outline-none",
                 "max-h-24",
+                isListening && "opacity-50",
               )}
+              disabled={isListening}
             />
             <button
               onClick={() => handleSend()}
-              disabled={!input.trim()}
+              disabled={!input.trim() || isListening}
               className={cn(
                 "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
                 "transition-all duration-200",
-                input.trim() ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                input.trim() && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
               )}
             >
               <ArrowUp className="w-4 h-4" />
@@ -308,15 +378,22 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      {message.sources && (
+                      {message.sources && message.sources.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-3">
+                          <span className="text-[10px] text-muted-foreground">Sources:</span>
                           {message.sources.map((source) => (
-                            <span
-                              key={source}
-                              className="text-[10px] px-2 py-1 rounded-md bg-muted text-muted-foreground"
+                            <button
+                              key={source.id}
+                              onClick={() => {
+                                if (onNavigate && source.id) {
+                                  onNavigate("doctrine-detail", source.id)
+                                }
+                              }}
+                              className="text-[10px] px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-left max-w-[200px] truncate"
+                              title={source.title}
                             >
-                              {source}
-                            </span>
+                              {source.title}
+                            </button>
                           ))}
                         </div>
                       )}

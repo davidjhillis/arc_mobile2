@@ -13,7 +13,6 @@ import { GroupDocumentsScreen } from "./screens/group-documents-screen"
 import { DoctrineDetailScreen } from "./screens/doctrine-detail-screen"
 import { FeedScreen } from "./screens/feed-screen"
 import { DownloadsScreen } from "./screens/downloads-screen"
-import { VoiceAgent } from "./voice-agent"
 
 export type Screen =
   | "login"
