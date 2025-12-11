@@ -28,3 +28,18 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Features
+
+- **Voice Agent**: Conversational AI assistant with speech-to-text and text-to-speech
+- **Doctrine Search**: Find information by assignment, phase, or topic
+- **AI-Powered Chat**: Ask questions and get answers from Red Cross doctrine
+- **Offline Support**: Download content for offline access
+- **Multi-modal Interface**: Voice and text input/output
+
+## Latest Updates
+
+- Conversational voice agent with expert personality
+- Fast TTS responses with "hear more" functionality
+- Clickable action buttons for quick navigation
+- Source article links in AI responses
