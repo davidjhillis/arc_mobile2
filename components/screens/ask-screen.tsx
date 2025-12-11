@@ -294,7 +294,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
-                      ? { ...msg, content: accumulatedContent }
+                      ? { ...msg, content: accumulatedContent, sources: responseSources.length > 0 ? responseSources : undefined }
                       : msg
                   )
                 )
@@ -308,16 +308,24 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       }
 
       setIsLoading(false)
+      
+      // Play TTS for final response after streaming completes
+      if (accumulatedContent.trim()) {
+        setTimeout(async () => {
+          await playAudioResponse(accumulatedContent)
+        }, 500)
+      }
     } catch (error) {
       console.error("Ask AI error:", error)
       setIsLoading(false)
       // Update the assistant message with error
+      const errorMessage = "I'm sorry, I'm having trouble processing your question right now. Please try again later."
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: "I'm sorry, I'm having trouble processing your question right now. Please try again later.",
+                content: errorMessage,
               }
             : msg
         )
@@ -496,6 +504,23 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Hidden audio element for TTS playback */}
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onPlay={() => setIsPlayingAudio(true)}
+          onEnded={() => {
+            setIsPlayingAudio(false)
+            setAudioUrl(null)
+          }}
+          onError={() => {
+            setIsPlayingAudio(false)
+            setAudioUrl(null)
+          }}
+        />
+      )}
 
       {/* Input bar - fixed at bottom */}
       <div className="p-4 pb-6 border-t border-border bg-background">
