@@ -38,8 +38,11 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     const [input, setInput] = useState(initialMessage || "")
   const [isLoading, setIsLoading] = useState(false)
   const [isVoiceActive, setIsVoiceActive] = useState(false)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   
   // Voice recognition for Ask screen
   const {
@@ -71,12 +74,69 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       },
     }))
 
-    // Auto-send initial message if provided (e.g., from voice)
-    useEffect(() => {
-      if (initialMessage && initialMessage.trim() && messages.length === 0) {
-        handleSend(initialMessage)
+  // Show greeting message on first load
+  useEffect(() => {
+    if (messages.length === 0 && !initialMessage) {
+      const greetingMessage: Message = {
+        id: "greeting",
+        role: "assistant",
+        content: "Hello! I'm your Red Cross Doctrine assistant. I can help you:\n\n• Find information about Mass Care operations\n• Answer questions about procedures and protocols\n• Locate specific doctrine articles\n• Explain disaster response guidelines\n\nWhat would you like to know?",
+        sources: undefined,
       }
-    }, [initialMessage])
+      setMessages([greetingMessage])
+    }
+  }, [])
+
+  // Auto-send initial message if provided (e.g., from voice)
+  useEffect(() => {
+    if (initialMessage && initialMessage.trim() && messages.length <= 1) {
+      handleSend(initialMessage)
+    }
+  }, [initialMessage])
+
+  // Check if input is a greeting (not a question)
+  const isGreeting = (text: string): boolean => {
+    const greetingPatterns = [
+      /^(hi|hello|hey|greetings|good morning|good afternoon|good evening)/i,
+      /^(thanks|thank you|thx)/i,
+      /^(bye|goodbye|see you)/i,
+      /^(how are you|how's it going|what's up)/i,
+    ]
+    return greetingPatterns.some(pattern => pattern.test(text.trim()))
+  }
+
+  // Play TTS for AI response
+  const playAudioResponse = async (text: string) => {
+    try {
+      const response = await fetch("/api/ai/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text.substring(0, 1000), // Limit to first 1000 chars for TTS
+          voice: "nova",
+          doctrineId: `chat_${Date.now()}`,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.audioUrl) {
+          setAudioUrl(data.audioUrl)
+          setIsPlayingAudio(true)
+        }
+      }
+    } catch (error) {
+      console.error("TTS error:", error)
+      // Don't show error to user, just skip TTS
+    }
+  }
+
+  // Handle audio playback
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      audioRef.current.play().catch(console.error)
+    }
+  }, [audioUrl])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -151,19 +211,38 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     setInput("")
     setIsLoading(true)
 
+    // Check if it's a greeting - respond conversationally without searching doctrine
+    if (isGreeting(messageText)) {
+      const greetingResponses = [
+        "Hello! How can I help you with Red Cross doctrine today?",
+        "Hi there! What would you like to know about disaster response operations?",
+        "Hey! I'm here to help you find information about Red Cross procedures. What can I help with?",
+      ]
+      const randomResponse = greetingResponses[Math.floor(Math.random() * greetingResponses.length)]
+      
+      const greetingReply: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: randomResponse,
+        sources: undefined,
+      }
+      
+      setMessages((prev) => [...prev, greetingReply])
+      setIsLoading(false)
+      
+      // Play TTS for greeting
+      await playAudioResponse(randomResponse)
+      return
+    }
+
     // Create assistant message placeholder for streaming
     const assistantMessageId = (Date.now() + 1).toString()
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      sources: sources.length > 0 ? sources : undefined,
-    }
-    setMessages((prev) => [...prev, assistantMessage])
-
+    let responseSources: Array<{ id: string; title: string }> = []
+    
     try {
-      // Find relevant articles for context
+      // Find relevant articles for context (only for actual questions)
       const { context: relevantContext, sources } = findRelevantArticles(messageText)
+      responseSources = sources
       
       const response = await fetch("/api/ai/chat", {
         method: "POST",
