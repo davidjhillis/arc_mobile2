@@ -50,11 +50,13 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     transcript,
     interimTranscript,
     isSupported: isVoiceSupported,
+    error: voiceError,
     startListening,
     stopListening,
     reset: resetVoice,
   } = useSpeechRecognition({
     onResult: (fullTranscript, isFinal) => {
+      console.log("[AskScreen] Voice result:", { fullTranscript, isFinal })
       if (isFinal && fullTranscript.trim()) {
         setInput(fullTranscript.trim())
         setIsVoiceActive(false)
@@ -63,6 +65,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         setTimeout(() => {
           handleSend(fullTranscript.trim())
         }, 300)
+      }
+    },
+    onError: (error) => {
+      console.error("[AskScreen] Voice error:", error)
+      setIsVoiceActive(false)
+      // Show user-friendly error
+      if (error.message.includes("not-allowed") || error.message.includes("permission")) {
+        alert("Microphone permission denied. Please enable microphone access in your browser settings.")
+      } else if (error.message.includes("no-speech")) {
+        // This is normal if user doesn't speak, don't show error
+        console.log("No speech detected")
+      } else {
+        console.error("Voice recognition error:", error.message)
       }
     },
   })
@@ -376,14 +391,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         <div className="p-4 pb-6">
           <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
             {/* Voice input button */}
-            {isVoiceSupported && (
+            {isVoiceSupported ? (
               <button
                 onClick={() => {
+                  console.log("[AskScreen] Mic button clicked, isListening:", isListening)
                   if (isListening) {
                     stopListening()
                     setIsVoiceActive(false)
+                    resetVoice()
                   } else {
                     setIsVoiceActive(true)
+                    console.log("[AskScreen] Starting voice recognition...")
                     startListening()
                   }
                 }}
@@ -402,6 +420,10 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                   <Mic className="w-4 h-4" />
                 )}
               </button>
+            ) : (
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
+                <Mic className="w-4 h-4 text-muted-foreground" />
+              </div>
             )}
             {/* Voice transcript display */}
             {(isListening || transcript || interimTranscript) && (
@@ -526,15 +548,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       <div className="p-4 pb-6 border-t border-border bg-background">
         <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
           {/* Voice input button */}
-          {isVoiceSupported && (
+          {isVoiceSupported ? (
             <button
               onClick={() => {
+                console.log("[AskScreen] Mic button clicked (conversation), isListening:", isListening)
                 if (isListening) {
                   stopListening()
                   setIsVoiceActive(false)
                   resetVoice()
                 } else {
                   setIsVoiceActive(true)
+                  console.log("[AskScreen] Starting voice recognition (conversation)...")
                   startListening()
                 }
               }}
@@ -553,6 +577,10 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 <Mic className="w-4 h-4" />
               )}
             </button>
+          ) : (
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
+              <Mic className="w-4 h-4 text-muted-foreground" />
+            </div>
           )}
           {/* Voice transcript display */}
           {(isListening || transcript || interimTranscript) && (

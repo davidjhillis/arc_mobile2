@@ -34,6 +34,14 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   })
 
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const onResultRef = useRef(onResult)
+  const onErrorRef = useRef(onError)
+
+  // Keep refs updated
+  useEffect(() => {
+    onResultRef.current = onResult
+    onErrorRef.current = onError
+  }, [onResult, onError])
 
   // Check if browser supports Speech Recognition
   useEffect(() => {
@@ -41,6 +49,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
     if (!SpeechRecognition) {
+      console.warn("[SpeechRecognition] Not supported in this browser")
       setState((prev) => ({
         ...prev,
         isSupported: false,
@@ -55,6 +64,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     recognition.lang = lang
 
     recognition.onstart = () => {
+      console.log("[SpeechRecognition] Started listening")
       setState((prev) => ({
         ...prev,
         isListening: true,
@@ -76,6 +86,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       }
 
       const fullTranscript = finalTranscript + interimTranscript
+      console.log("[SpeechRecognition] Result:", { finalTranscript, interimTranscript, fullTranscript })
 
       setState((prev) => ({
         ...prev,
@@ -83,24 +94,26 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         interimTranscript: interimTranscript.trim(),
       }))
 
-      if (onResult) {
-        onResult(fullTranscript.trim(), finalTranscript.length > 0)
+      if (onResultRef.current) {
+        onResultRef.current(fullTranscript.trim(), finalTranscript.length > 0)
       }
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("[SpeechRecognition] Error:", event.error)
       const error = new Error(`Speech recognition error: ${event.error}`)
       setState((prev) => ({
         ...prev,
         isListening: false,
         error,
       }))
-      if (onError) {
-        onError(error)
+      if (onErrorRef.current) {
+        onErrorRef.current(error)
       }
     }
 
     recognition.onend = () => {
+      console.log("[SpeechRecognition] Ended")
       setState((prev) => ({
         ...prev,
         isListening: false,
@@ -112,10 +125,14 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.stop()
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          // Ignore errors on cleanup
+        }
       }
     }
-  }, [continuous, lang, onResult, onError])
+  }, [continuous, lang])
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current) {
