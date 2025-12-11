@@ -79,14 +79,12 @@ export function VoiceAgent({ onTranscript, onCommand, className }: VoiceAgentPro
     }
   }
 
-  // Handle touch events for mobile
+  // Handle touch events for mobile (without preventDefault to avoid passive listener warning)
   const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault()
     handleMouseDown()
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    e.preventDefault()
     handleMouseUp()
   }
 

@@ -140,13 +140,11 @@ export function AppShell() {
     <div className="flex flex-col min-h-dvh max-w-lg mx-auto bg-background">
       <main className="flex-1 overflow-y-auto pb-20">{renderScreen()}</main>
       {isAuthenticated && activeScreen !== "login" && (
-        <>
-          <MobileNav activeScreen={activeScreen} onNavigate={(screen) => handleNavigate(screen)} />
-          <VoiceAgent
-            onTranscript={handleVoiceTranscript}
-            onCommand={handleVoiceCommand}
-          />
-        </>
+        <MobileNav 
+          activeScreen={activeScreen} 
+          onNavigate={(screen) => handleNavigate(screen)}
+          onVoiceTranscript={handleVoiceTranscript}
+        />
       )}
     </div>
   )
