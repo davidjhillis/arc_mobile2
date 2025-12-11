@@ -98,6 +98,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           />
           <input
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
