@@ -122,9 +122,17 @@ export function VoiceAgent({ onTranscript, onCommand, className }: VoiceAgentPro
     return null
   }
 
-  if (!isSupported) {
-    return null // Don't show button if not supported
-  }
+  // Debug logging
+  useEffect(() => {
+    console.log("[VoiceAgent] Component mounted, isSupported:", isSupported)
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    console.log("[VoiceAgent] Browser support check:", {
+      hasSpeechRecognition: !!SpeechRecognition,
+      hasWebkitSpeechRecognition: !!(window as any).webkitSpeechRecognition,
+      userAgent: navigator.userAgent
+    })
+  }, [isSupported])
 
   const displayText = transcript || interimTranscript || (isListening ? "Listening..." : "")
 
@@ -137,6 +145,7 @@ export function VoiceAgent({ onTranscript, onCommand, className }: VoiceAgentPro
         onMouseLeave={handleMouseUp}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        disabled={!isSupported}
         className={cn(
           "fixed bottom-24 right-5 z-50",
           "w-16 h-16 rounded-full",
@@ -146,9 +155,11 @@ export function VoiceAgent({ onTranscript, onCommand, className }: VoiceAgentPro
             ? "bg-primary scale-110 shadow-xl"
             : "bg-primary/90 hover:bg-primary",
           isPressed && "scale-95",
+          !isSupported && "opacity-50 cursor-not-allowed",
           className
         )}
         aria-label="Voice agent"
+        title={!isSupported ? "Voice recognition not supported in this browser. Please use Chrome or Edge." : "Press and hold to speak"}
       >
         {isListening ? (
           <MicOff className="w-7 h-7 text-primary-foreground animate-pulse" />
