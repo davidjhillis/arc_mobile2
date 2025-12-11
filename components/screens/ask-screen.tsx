@@ -219,7 +219,34 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   const playMoreAudio = async (messageId: string, fullContent: string) => {
     const { remaining } = splitTextForTTS(fullContent)
     if (remaining.trim()) {
-      await playAudioResponse(remaining, messageId)
+      // Play the remaining content
+      try {
+        const response = await fetch("/api/ai/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: remaining.trim(),
+            voice: "nova",
+            doctrineId: `chat_more_${Date.now()}_${messageId}`,
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.audioUrl) {
+            setAudioUrl(data.audioUrl)
+            setIsPlayingAudio(true)
+            // Mark as no longer having more after playing
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === messageId ? { ...msg, hasMore: false } : msg
+              )
+            )
+          }
+        }
+      } catch (error) {
+        console.error("TTS error:", error)
+      }
     }
   }
 
