@@ -18,3 +18,8 @@ node_modules/
 # pnpm-lock.yaml
 .vercel
 .env*.local
+
+# Source documents (Word files) - don't commit these
+OneDrive_*/
+*.docx
+*.doc
