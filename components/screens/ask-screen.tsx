@@ -95,13 +95,23 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   // Show greeting message on first load
   useEffect(() => {
     if (messages.length === 0 && !initialMessage) {
+      const greetingText = "Hello! I'm your Red Cross Doctrine assistant. How may I help you today?"
       const greetingMessage: Message = {
         id: "greeting",
         role: "assistant",
-        content: "Hello! I'm your Red Cross Doctrine assistant. I can help you:\n\n• Find information about Mass Care operations\n• Answer questions about procedures and protocols\n• Locate specific doctrine articles\n• Explain disaster response guidelines\n\nWhat would you like to know?",
+        content: greetingText,
         sources: undefined,
+        actions: [
+          "How do I set up a shelter?",
+          "What are Mass Care operations?",
+          "Find information about feeding protocols",
+        ],
       }
       setMessages([greetingMessage])
+      // Auto-play greeting TTS
+      setTimeout(() => {
+        playAudioResponse(greetingText)
+      }, 500)
     }
   }, [])
 
@@ -155,16 +165,40 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     }
   }
 
-  // Play TTS for AI response
-  const playAudioResponse = async (text: string) => {
+  // Split text into ~75 word chunks (approximately 5 seconds of speech)
+  const splitTextForTTS = (text: string): { short: string; remaining: string } => {
+    const words = text.split(/\s+/)
+    const shortWordCount = 75 // ~5 seconds at normal speaking pace
+    const shortText = words.slice(0, shortWordCount).join(" ")
+    const remaining = words.slice(shortWordCount).join(" ")
+    return { short: shortText, remaining }
+  }
+
+  // Play TTS for AI response (short version first)
+  const playAudioResponse = async (text: string, messageId?: string) => {
     try {
+      // Split into short and remaining
+      const { short, remaining } = splitTextForTTS(text)
+      const textToSpeak = short.trim()
+      
+      // If there's remaining content, mark message as having more (but keep full content visible)
+      if (remaining.trim() && messageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? { ...msg, hasMore: true, fullContent: text } // Keep full content, just mark as having more
+              : msg
+          )
+        )
+      }
+
       const response = await fetch("/api/ai/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: text.substring(0, 1000), // Limit to first 1000 chars for TTS
+          text: textToSpeak,
           voice: "nova",
-          doctrineId: `chat_${Date.now()}`,
+          doctrineId: `chat_${Date.now()}_${messageId || "temp"}`,
         }),
       })
 
@@ -178,6 +212,14 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     } catch (error) {
       console.error("TTS error:", error)
       // Don't show error to user, just skip TTS
+    }
+  }
+
+  // Play remaining content
+  const playMoreAudio = async (messageId: string, fullContent: string) => {
+    const { remaining } = splitTextForTTS(fullContent)
+    if (remaining.trim()) {
+      await playAudioResponse(remaining, messageId)
     }
   }
 
@@ -263,22 +305,18 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
     // Check if it's a greeting - respond conversationally without searching doctrine
     if (isGreeting(messageText)) {
-      const greetingResponses = [
-        "Hello! How can I help you with Red Cross doctrine today?",
-        "Hi there! What would you like to know about disaster response operations?",
-        "Hey! I'm here to help you find information about Red Cross procedures. What can I help with?",
-      ]
-      const randomResponse = greetingResponses[Math.floor(Math.random() * greetingResponses.length)]
+      const greetingResponse = "Hello! I'm here to help you with Red Cross doctrine and procedures. How may I help you today?"
       
       const greetingReply: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: randomResponse,
+        content: greetingResponse,
         sources: undefined,
         actions: [
           "How do I set up a shelter?",
           "What are Mass Care operations?",
           "Find information about feeding protocols",
+          "Explain disaster response procedures",
         ],
       }
       
@@ -286,7 +324,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       setIsLoading(false)
       
       // Play TTS for greeting
-      await playAudioResponse(randomResponse)
+      await playAudioResponse(greetingResponse, greetingReply.id)
       return
     }
 
@@ -374,21 +412,26 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       
       // Extract actions from final content and update message
       const finalActions = extractActions(accumulatedContent)
-      if (finalActions.length > 0) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, actions: finalActions }
-              : msg
-          )
-        )
-      }
       
-      // Play TTS for final response after streaming completes
+      // Update message with full content and actions
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? { 
+                ...msg, 
+                content: accumulatedContent, // Show full content in chat
+                fullContent: accumulatedContent,
+                actions: finalActions.length > 0 ? finalActions : undefined,
+              }
+            : msg
+        )
+      )
+      
+      // Play TTS for final response after streaming completes (short version first)
       if (accumulatedContent.trim()) {
         setTimeout(async () => {
-          await playAudioResponse(accumulatedContent)
-        }, 500)
+          await playAudioResponse(accumulatedContent, assistantMessageId)
+        }, 300)
       }
     } catch (error) {
       console.error("Ask AI error:", error)
@@ -546,7 +589,27 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                       <Sparkles className="w-3.5 h-3.5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                      {/* Show full content if available, otherwise show content */}
+                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                        {message.fullContent || message.content}
+                      </p>
+                      
+                      {/* "Hear more" button if content was truncated */}
+                      {message.hasMore && message.fullContent && (
+                        <button
+                          onClick={() => playMoreAudio(message.id, message.fullContent!)}
+                          className={cn(
+                            "mt-3 px-4 py-2 rounded-lg text-sm",
+                            "bg-primary/10 text-primary border border-primary/20",
+                            "hover:bg-primary/20 active:scale-[0.98] transition-all",
+                            "flex items-center gap-2"
+                          )}
+                        >
+                          <Mic className="w-4 h-4" />
+                          Hear more
+                        </button>
+                      )}
+                      
                       {/* Action buttons */}
                       {message.actions && message.actions.length > 0 && (
                         <div className="flex flex-col gap-2 mt-4">
