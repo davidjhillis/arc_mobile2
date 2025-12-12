@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
-import { ArrowUp, Loader2, Sparkles, BookOpen, Mic, MicOff } from "lucide-react"
+import { ArrowUp, Loader2, Sparkles, BookOpen, Mic, MicOff, Volume2, VolumeX } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { massCareContent } from "@/lib/mass-care-content"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
@@ -42,6 +42,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   const [isVoiceActive, setIsVoiceActive] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  const [ttsEnabled, setTtsEnabled] = useState(true) // TTS toggle - default enabled
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -207,14 +208,24 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
   // Play TTS for AI response - full content, no splitting
   const playAudioResponse = async (text: string, messageId?: string) => {
+    // Don't play if TTS is disabled
+    if (!ttsEnabled) {
+      console.log("[AskScreen] TTS disabled, skipping playback")
+      return
+    }
+    
     try {
       // Stop any currently playing audio first
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.currentTime = 0
+        audioRef.current.src = ""
       }
       setAudioUrl(null)
       setIsPlayingAudio(false)
+      
+      // Small delay to ensure audio element is reset
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Play full content - no splitting to ensure complete playback
       const response = await fetch("/api/ai/tts", {
@@ -230,12 +241,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       if (response.ok) {
         const data = await response.json()
         if (data.audioUrl) {
+          console.log("[AskScreen] Setting audio URL:", data.audioUrl)
           setAudioUrl(data.audioUrl)
           setIsPlayingAudio(true)
         }
+      } else {
+        console.error("[AskScreen] TTS API error:", response.status, await response.text())
       }
     } catch (error) {
-      console.error("TTS error:", error)
+      console.error("[AskScreen] TTS error:", error)
       // Don't show error to user, just skip TTS
     }
   }
@@ -375,8 +389,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       
       // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
       const questionLower = messageText.toLowerCase()
-      // More flexible detection: 215, form 215, who completes/fills/does 215, etc.
-      const is215Question = /215|form\s*215|who.*215|215.*who|completes.*215|fills.*215|does.*215/i.test(questionLower)
+      // Detect questions about Form 215 or who completes/fills/does 215
+      const is215Question = /(who|what|how).*(completes?|fills?|does?|responsible|do).*215|215.*(who|what|completes?|fills?|does?|responsible)|form\s*215|^215/i.test(questionLower)
       if (is215Question) {
         // For 215 questions, prioritize daily-tactics-planning - make it the primary source
         const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
@@ -761,6 +775,33 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       {/* Input bar - fixed at bottom */}
       <div className="p-4 pb-6 border-t border-border bg-background">
         <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
+          {/* TTS Toggle button */}
+          <button
+            onClick={() => {
+              setTtsEnabled(!ttsEnabled)
+              // Stop audio if disabling TTS
+              if (!ttsEnabled === false && audioRef.current) {
+                audioRef.current.pause()
+                audioRef.current.currentTime = 0
+                setAudioUrl(null)
+                setIsPlayingAudio(false)
+              }
+            }}
+            className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+              "transition-all duration-200",
+              ttsEnabled
+                ? "bg-primary/10 text-primary hover:bg-primary/20"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            )}
+            title={ttsEnabled ? "Disable voice responses" : "Enable voice responses"}
+          >
+            {ttsEnabled ? (
+              <Volume2 className="w-4 h-4" />
+            ) : (
+              <VolumeX className="w-4 h-4" />
+            )}
+          </button>
           {/* Voice input button */}
           {isVoiceSupported ? (
             <button
