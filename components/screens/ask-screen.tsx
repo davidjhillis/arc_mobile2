@@ -256,39 +256,62 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
   // Handle audio playback
   useEffect(() => {
-    if (audioUrl && audioRef.current && ttsEnabled) {
-      // Ensure audio is loaded and ready before playing
-      const playAudio = async () => {
-        try {
-          // Load the new source
-          audioRef.current!.load()
-          // Wait for audio to be ready
-          await new Promise((resolve) => {
-            if (audioRef.current) {
-              audioRef.current.oncanplay = resolve
-              audioRef.current.onerror = () => {
-                console.error("[AskScreen] Audio load error")
-                resolve(null)
-              }
-            }
-          })
-          // Reset audio to start
-          audioRef.current!.currentTime = 0
-          await audioRef.current!.play()
-          console.log("[AskScreen] Audio playback started:", audioUrl)
-        } catch (error) {
-          console.error("[AskScreen] Failed to play audio:", error)
-          setIsPlayingAudio(false)
-          setAudioUrl(null)
-        }
+    if (!audioUrl || !audioRef.current || !ttsEnabled) {
+      if (!ttsEnabled && audioRef.current) {
+        // Stop audio if TTS is disabled
+        audioRef.current.pause()
+        setAudioUrl(null)
+        setIsPlayingAudio(false)
       }
-      playAudio()
-    } else if (!ttsEnabled && audioRef.current) {
-      // Stop audio if TTS is disabled
-      audioRef.current.pause()
-      setAudioUrl(null)
-      setIsPlayingAudio(false)
+      return
     }
+
+    // Ensure audio is loaded and ready before playing
+    const playAudio = async () => {
+      const audio = audioRef.current
+      if (!audio) return
+
+      try {
+        console.log("[AskScreen] Loading audio:", audioUrl)
+        
+        // Set up error handlers before loading
+        const handleError = (e: Event) => {
+          console.error("[AskScreen] Audio error event:", e, audio.error)
+          const errorMsg = audio.error ? `Code: ${audio.error.code}, Message: ${audio.error.message}` : "Unknown error"
+          console.error("[AskScreen] Audio error details:", errorMsg)
+          setIsPlayingAudio(false)
+          // Don't clear audioUrl on error - let user retry if needed
+        }
+
+        const handleCanPlay = async () => {
+          try {
+            console.log("[AskScreen] Audio can play, starting playback")
+            audio.currentTime = 0
+            await audio.play()
+            console.log("[AskScreen] Audio playback started successfully")
+          } catch (playError) {
+            console.error("[AskScreen] Play error:", playError)
+            setIsPlayingAudio(false)
+          }
+        }
+
+        // Remove old listeners
+        audio.removeEventListener('canplay', handleCanPlay)
+        audio.removeEventListener('error', handleError)
+        
+        // Add new listeners
+        audio.addEventListener('canplay', handleCanPlay, { once: true })
+        audio.addEventListener('error', handleError, { once: true })
+        
+        // Load the new source
+        audio.load()
+      } catch (error) {
+        console.error("[AskScreen] Failed to setup audio:", error)
+        setIsPlayingAudio(false)
+      }
+    }
+    
+    playAudio()
   }, [audioUrl, ttsEnabled])
 
   const scrollToBottom = () => {
@@ -781,16 +804,34 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       <audio
         ref={audioRef}
         src={audioUrl || undefined}
-        onPlay={() => setIsPlayingAudio(true)}
+        onPlay={() => {
+          console.log("[AskScreen] Audio play event")
+          setIsPlayingAudio(true)
+        }}
         onEnded={() => {
+          console.log("[AskScreen] Audio ended event")
           setIsPlayingAudio(false)
-          setAudioUrl(null)
+          // Don't clear audioUrl immediately - keep it for potential replay
+          setTimeout(() => {
+            setAudioUrl(null)
+          }, 100)
         }}
         onError={(e) => {
-          console.error("[AskScreen] Audio playback error:", e)
+          const audio = e.currentTarget as HTMLAudioElement
+          const error = audio.error
+          console.error("[AskScreen] Audio playback error:", {
+            error,
+            code: error?.code,
+            message: error?.message,
+            networkState: audio.networkState,
+            readyState: audio.readyState
+          })
           setIsPlayingAudio(false)
-          setAudioUrl(null)
+          // Don't clear audioUrl on error - might be recoverable
         }}
+        onLoadStart={() => console.log("[AskScreen] Audio load start")}
+        onLoadedData={() => console.log("[AskScreen] Audio loaded data")}
+        onCanPlay={() => console.log("[AskScreen] Audio can play")}
         preload="auto"
       />
 
@@ -800,9 +841,10 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           {/* TTS Toggle button */}
           <button
             onClick={() => {
-              setTtsEnabled(!ttsEnabled)
+              const newTtsEnabled = !ttsEnabled
+              setTtsEnabled(newTtsEnabled)
               // Stop audio if disabling TTS
-              if (!ttsEnabled === false && audioRef.current) {
+              if (!newTtsEnabled && audioRef.current) {
                 audioRef.current.pause()
                 audioRef.current.currentTime = 0
                 setAudioUrl(null)
