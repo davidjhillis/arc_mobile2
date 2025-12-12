@@ -821,7 +821,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                                   console.log("[AskScreen] Source clicked:", source.id, source.title)
                                   if (onNavigate && source.id) {
                                     console.log("[AskScreen] Navigating to doctrine-detail with id:", source.id)
-                                    onNavigate("doctrine-detail", source.id)
+                                    // Fix: onNavigate signature is (screen, disasterType?, doctrineId?, group?)
+                                    onNavigate("doctrine-detail", undefined, source.id)
                                   } else {
                                     console.warn("[AskScreen] Cannot navigate - onNavigate:", !!onNavigate, "source.id:", source.id)
                                   }
