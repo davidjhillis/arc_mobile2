@@ -280,33 +280,51 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       return
     }
 
+    // Store current audioUrl to check against in handlers
+    const currentAudioUrl = audioUrl
+    const audio = audioRef.current
+    
     // Ensure audio is loaded and ready before playing
     const playAudio = async () => {
-      const audio = audioRef.current
       if (!audio) return
 
       try {
-        console.log("[AskScreen] Loading audio:", audioUrl)
+        console.log("[AskScreen] Loading audio:", currentAudioUrl)
         
         // Set up error handlers before loading
         const handleError = (e: Event) => {
-          console.error("[AskScreen] Audio error event:", e, audio.error)
-          const errorMsg = audio.error ? `Code: ${audio.error.code}, Message: ${audio.error.message}` : "Unknown error"
-          console.error("[AskScreen] Audio error details:", errorMsg)
+          const errorAudio = e.currentTarget as HTMLAudioElement
+          const error = errorAudio.error
+          console.error("[AskScreen] Audio error event:", {
+            error,
+            code: error?.code,
+            message: error?.message,
+            networkState: errorAudio.networkState,
+            readyState: errorAudio.readyState,
+            src: errorAudio.src,
+            expectedUrl: currentAudioUrl
+          })
           setIsPlayingAudio(false)
-          // Don't clear audioUrl on error - let user retry if needed
+          // Only clear if this is still the current audio URL
+          if (audioRef.current?.src === currentAudioUrl || !audioRef.current?.src) {
+            setAudioUrl(null)
+          }
         }
 
         const handleCanPlay = async () => {
           try {
             console.log("[AskScreen] Audio can play, starting playback")
-            // Ensure audio is still valid
-            if (!audioRef.current || audioRef.current.src !== audioUrl) {
-              console.warn("[AskScreen] Audio element changed, aborting play")
+            // Ensure audio is still valid and matches current URL
+            if (!audioRef.current || audioRef.current.src !== currentAudioUrl) {
+              console.warn("[AskScreen] Audio element changed, aborting play", {
+                currentSrc: audioRef.current?.src,
+                expectedUrl: currentAudioUrl
+              })
               return
             }
-            audio.currentTime = 0
-            const playPromise = audio.play()
+            const playAudio = audioRef.current
+            playAudio.currentTime = 0
+            const playPromise = playAudio.play()
             if (playPromise !== undefined) {
               await playPromise
               console.log("[AskScreen] Audio playback started successfully")
@@ -314,11 +332,14 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           } catch (playError) {
             console.error("[AskScreen] Play error:", playError)
             setIsPlayingAudio(false)
-            // Don't clear audioUrl - might be recoverable
+            // Clear audioUrl on play error
+            if (audioRef.current?.src === currentAudioUrl) {
+              setAudioUrl(null)
+            }
           }
         }
 
-        // Remove old listeners
+        // Remove old listeners to prevent duplicates
         audio.removeEventListener('canplay', handleCanPlay)
         audio.removeEventListener('error', handleError)
         
@@ -326,15 +347,25 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         audio.addEventListener('canplay', handleCanPlay, { once: true })
         audio.addEventListener('error', handleError, { once: true })
         
+        // Reset audio element completely before loading new source
+        audio.pause()
+        audio.currentTime = 0
+        
         // Load the new source
         audio.load()
       } catch (error) {
         console.error("[AskScreen] Failed to setup audio:", error)
         setIsPlayingAudio(false)
+        setAudioUrl(null)
       }
     }
     
     playAudio()
+    
+    // Cleanup function
+    return () => {
+      // Don't cleanup here - let the audio element handle its own lifecycle
+    }
   }, [audioUrl, ttsEnabled])
 
   const scrollToBottom = () => {
