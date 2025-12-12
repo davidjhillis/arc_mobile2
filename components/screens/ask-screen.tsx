@@ -214,20 +214,31 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       return
     }
     
+    if (!text || !text.trim()) {
+      console.warn("[AskScreen] Empty text, skipping TTS")
+      return
+    }
+    
     try {
+      console.log("[AskScreen] Starting TTS for message:", messageId, "text length:", text.length)
+      
       // Stop any currently playing audio first
       if (audioRef.current) {
+        console.log("[AskScreen] Stopping previous audio")
         audioRef.current.pause()
         audioRef.current.currentTime = 0
-        audioRef.current.src = ""
+        // Don't clear src immediately - let it finish stopping
       }
-      setAudioUrl(null)
+      
+      // Clear state
       setIsPlayingAudio(false)
+      setAudioUrl(null)
       
       // Small delay to ensure audio element is reset
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, 150))
       
       // Play full content - no splitting to ensure complete playback
+      console.log("[AskScreen] Fetching TTS from API")
       const response = await fetch("/api/ai/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,12 +252,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       if (response.ok) {
         const data = await response.json()
         if (data.audioUrl) {
-          console.log("[AskScreen] Setting audio URL:", data.audioUrl)
+          console.log("[AskScreen] TTS API success, setting audio URL:", data.audioUrl)
+          // Set audio URL - this will trigger the useEffect to play it
           setAudioUrl(data.audioUrl)
-          setIsPlayingAudio(true)
+        } else {
+          console.warn("[AskScreen] TTS API returned no audioUrl")
         }
       } else {
-        console.error("[AskScreen] TTS API error:", response.status, await response.text())
+        const errorText = await response.text()
+        console.error("[AskScreen] TTS API error:", response.status, errorText)
       }
     } catch (error) {
       console.error("[AskScreen] TTS error:", error)
