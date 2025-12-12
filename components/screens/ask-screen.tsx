@@ -464,6 +464,9 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             if (data === "[DONE]") {
               // Final update before ending
               if (accumulatedContent.trim()) {
+                // Ensure sources are set correctly (daily-tactics-planning should be first for 215 questions)
+                const finalSources = responseSources.length > 0 ? [...responseSources] : undefined
+                console.log("[AskScreen] Final sources for message:", finalSources)
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -471,7 +474,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           ...msg,
                           content: accumulatedContent,
                           fullContent: accumulatedContent,
-                          sources: responseSources.length > 0 ? responseSources : undefined,
+                          sources: finalSources,
                         }
                       : msg
                   )
@@ -499,6 +502,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 }
                 accumulatedContent += contentToAdd
                 // Update the assistant message with accumulated content (ensure it's always visible)
+                // Use a copy of responseSources to ensure it doesn't get mutated
+                const currentSources = responseSources.length > 0 ? [...responseSources] : undefined
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -506,7 +511,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           ...msg, 
                           content: accumulatedContent, // Always show full content as it streams
                           fullContent: accumulatedContent,
-                          sources: responseSources.length > 0 ? responseSources : undefined,
+                          sources: currentSources,
                         }
                       : msg
                   )
