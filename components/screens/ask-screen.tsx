@@ -227,15 +227,14 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         console.log("[AskScreen] Stopping previous audio")
         audioRef.current.pause()
         audioRef.current.currentTime = 0
-        // Don't clear src immediately - let it finish stopping
       }
       
-      // Clear state
+      // Clear state - this will trigger useEffect cleanup
       setIsPlayingAudio(false)
       setAudioUrl(null)
       
-      // Small delay to ensure audio element is reset
-      await new Promise(resolve => setTimeout(resolve, 150))
+      // Small delay to ensure audio element is reset and state cleared
+      await new Promise(resolve => setTimeout(resolve, 200))
       
       // Play full content - no splitting to ensure complete playback
       console.log("[AskScreen] Fetching TTS from API")
@@ -698,50 +697,51 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                   <Mic className="w-4 h-4" />
                 )}
               </button>
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
-                <Mic className="w-4 h-4 text-muted-foreground" />
+            )}
+          
+          {/* Text input container */}
+          <div className="flex-1 flex flex-col min-w-0 bg-card rounded-xl border border-border p-2.5">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value)
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={isListening ? "Listening..." : "Ask a question..."}
+              rows={1}
+              autoComplete="off"
+              className={cn(
+                "w-full bg-transparent resize-none overflow-hidden",
+                "text-sm text-foreground placeholder:text-muted-foreground",
+                "focus:outline-none",
+                "min-h-[2rem] max-h-[120px]",
+                isListening && "opacity-50",
+              )}
+              disabled={isListening}
+            />
+            {/* Voice transcript display - shown below textarea when active */}
+            {(isListening || transcript || interimTranscript) && (
+              <div className="w-full px-1 pt-1.5 text-xs text-muted-foreground italic break-words whitespace-pre-wrap border-t border-border/50 mt-1.5">
+                {transcript || interimTranscript || "Listening..."}
               </div>
             )}
-            <div className="flex-1 flex flex-col min-w-0">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Listening..." : "Ask a question..."}
-                rows={1}
-                autoComplete="off"
-                className={cn(
-                  "w-full px-2 py-2 bg-transparent resize-none overflow-hidden",
-                  "text-sm text-foreground placeholder:text-muted-foreground",
-                  "focus:outline-none",
-                  "min-h-[2.5rem] max-h-[200px]",
-                  isListening && "opacity-50",
-                )}
-                disabled={isListening}
-              />
-              {/* Voice transcript display - never truncated, shown below textarea */}
-              {(isListening || transcript || interimTranscript) && (
-                <div className="w-full px-2 py-1 text-xs text-muted-foreground italic break-words whitespace-pre-wrap">
-                  {transcript || interimTranscript || "Listening..."}
-                </div>
-              )}
-            </div>
+          </div>
+          
+          {/* Submit button - Only show when there's input */}
+          {input.trim() && !isListening && (
             <button
               onClick={() => handleSend()}
-              disabled={!input.trim() || isListening}
               className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-                "transition-all duration-200",
-                input.trim() && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                "w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0",
+                "bg-primary text-primary-foreground",
+                "active:scale-[0.95] transition-all duration-200 shadow-sm",
               )}
+              title="Send"
             >
-              <ArrowUp className="w-4 h-4" />
+              <ArrowUp className="w-5 h-5" />
             </button>
-          </div>
+          )}
         </div>
       </div>
     )
