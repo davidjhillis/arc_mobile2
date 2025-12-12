@@ -433,15 +433,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 )
 
                 // Start TTS immediately when we have ~50 words or first complete sentence
+                // But wait for streaming to complete to ensure full response is played
                 if (!ttsStarted && accumulatedContent.trim()) {
                   const wordCount = accumulatedContent.split(/\s+/).length
                   const hasCompleteSentence = /[.!?]\s/.test(accumulatedContent)
                   
                   // Start TTS if we have at least 50 words OR a complete sentence with 20+ words
+                  // But mark as started so we don't trigger multiple times during streaming
                   if (wordCount >= 50 || (hasCompleteSentence && wordCount >= 20)) {
                     ttsStarted = true
-                    // Start TTS immediately with current content (will be updated as more streams in)
-                    playAudioResponse(accumulatedContent, assistantMessageId)
+                    // Don't start TTS yet - wait for full response to ensure complete playback
                   }
                 }
               }

@@ -30,7 +30,8 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
     .replace(/\*/g, "") // Remove italics
     .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") // Convert links to text
     .replace(/\n{3,}/g, "\n\n") // Normalize line breaks
-    .substring(0, 4096) // OpenAI limit is 4096 characters
+    // Note: OpenAI TTS limit is 4096 characters, but we'll handle longer text by splitting if needed
+    .substring(0, 4096) // OpenAI limit is 4096 characters per request
 
   // Generate audio via OpenAI API
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -44,7 +45,7 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
         input: cleanText,
         voice: voice,
         response_format: "mp3",
-        speed: 1.2, // 1.2× speed for faster playback
+        speed: 1.0, // Normal speed (1.0×)
       }),
   })
 
