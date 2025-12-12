@@ -436,14 +436,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             try {
               const json = JSON.parse(data)
               const content = json.content
-              if (content) {
-                // Fix: If accumulatedContent is empty and content starts with punctuation/whitespace,
-                // it might be a continuation from previous chunk - ensure we don't lose the first word
+              if (content && typeof content === 'string') {
+                // Fix: Trim leading whitespace/punctuation if this is the first chunk and it starts incorrectly
+                let contentToAdd = content
                 if (accumulatedContent === "" && /^[\s,\.;:]/.test(content)) {
-                  // This shouldn't happen, but if it does, log it for debugging
-                  console.warn("[Stream] First chunk starts with punctuation:", content.substring(0, 20))
+                  // If first chunk starts with punctuation, it might be missing the first word
+                  // This is likely an AI generation issue, but we'll trim leading punctuation
+                  contentToAdd = content.replace(/^[\s,\.;:]+/, '')
+                  console.warn("[Stream] First chunk started with punctuation, trimmed:", content.substring(0, 20))
                 }
-                accumulatedContent += content
+                accumulatedContent += contentToAdd
                 // Update the assistant message with accumulated content (ensure it's always visible)
                 setMessages((prev) =>
                   prev.map((msg) =>
