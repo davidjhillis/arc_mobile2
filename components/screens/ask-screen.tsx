@@ -375,7 +375,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       
       // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
       const questionLower = messageText.toLowerCase()
-      const is215Question = /who.*215|who.*completes.*215|who.*fills.*215|who.*does.*215|215.*who|form.*215|who.*form.*215/i.test(questionLower)
+      // More flexible detection: 215, form 215, who completes/fills/does 215, etc.
+      const is215Question = /215|form\s*215|who.*215|215.*who|completes.*215|fills.*215|does.*215/i.test(questionLower)
       if (is215Question) {
         // For 215 questions, prioritize daily-tactics-planning - make it the primary source
         const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
