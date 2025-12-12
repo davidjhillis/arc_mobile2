@@ -697,51 +697,50 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                   <Mic className="w-4 h-4" />
                 )}
               </button>
-            )}
-          
-          {/* Text input container */}
-          <div className="flex-1 flex flex-col min-w-0 bg-card rounded-xl border border-border p-2.5">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value)
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={isListening ? "Listening..." : "Ask a question..."}
-              rows={1}
-              autoComplete="off"
-              className={cn(
-                "w-full bg-transparent resize-none overflow-hidden",
-                "text-sm text-foreground placeholder:text-muted-foreground",
-                "focus:outline-none",
-                "min-h-[2rem] max-h-[120px]",
-                isListening && "opacity-50",
-              )}
-              disabled={isListening}
-            />
-            {/* Voice transcript display - shown below textarea when active */}
-            {(isListening || transcript || interimTranscript) && (
-              <div className="w-full px-1 pt-1.5 text-xs text-muted-foreground italic break-words whitespace-pre-wrap border-t border-border/50 mt-1.5">
-                {transcript || interimTranscript || "Listening..."}
+            ) : (
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
+                <Mic className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
-          </div>
-          
-          {/* Submit button - Only show when there's input */}
-          {input.trim() && !isListening && (
+            <div className="flex-1 flex flex-col min-w-0">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={isListening ? "Listening..." : "Ask a question..."}
+                rows={1}
+                autoComplete="off"
+                className={cn(
+                  "w-full px-2 py-2 bg-transparent resize-none overflow-hidden",
+                  "text-sm text-foreground placeholder:text-muted-foreground",
+                  "focus:outline-none",
+                  "min-h-[2.5rem] max-h-[200px]",
+                  isListening && "opacity-50",
+                )}
+                disabled={isListening}
+              />
+              {/* Voice transcript display - never truncated, shown below textarea */}
+              {(isListening || transcript || interimTranscript) && (
+                <div className="w-full px-2 py-1 text-xs text-muted-foreground italic break-words whitespace-pre-wrap">
+                  {transcript || interimTranscript || "Listening..."}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => handleSend()}
+              disabled={!input.trim() || isListening}
               className={cn(
-                "w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0",
-                "bg-primary text-primary-foreground",
-                "active:scale-[0.95] transition-all duration-200 shadow-sm",
+                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                "transition-all duration-200",
+                input.trim() && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
               )}
-              title="Send"
             >
-              <ArrowUp className="w-5 h-5" />
+              <ArrowUp className="w-4 h-4" />
             </button>
-          )}
+          </div>
         </div>
       </div>
     )
@@ -905,36 +904,37 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         
         {/* Main input area */}
         <div className="flex items-end gap-2">
-          {/* Voice input button */}
-          {isVoiceSupported ? (
+          {/* Voice input button - Primary action */}
+          {isVoiceSupported && (
             <button
               onClick={() => {
-                console.log("[AskScreen] Mic button clicked (conversation), isListening:", isListening)
                 if (isListening) {
                   stopListening()
                   setIsVoiceActive(false)
                   resetVoice()
                 } else {
                   setIsVoiceActive(true)
-                  console.log("[AskScreen] Starting voice recognition (conversation)...")
                   startListening()
                 }
               }}
               className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                "w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0",
                 "transition-all duration-200",
                 isListening
-                  ? "bg-primary text-primary-foreground animate-pulse"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+                  ? "bg-primary text-primary-foreground animate-pulse shadow-lg"
+                  : input.trim() 
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary text-primary-foreground",
               )}
-              title={isListening ? "Stop listening" : "Start voice input"}
+              title={isListening ? "Stop listening" : "Voice input"}
             >
               {isListening ? (
-                <MicOff className="w-4 h-4" />
+                <MicOff className="w-5 h-5" />
               ) : (
-                <Mic className="w-4 h-4" />
+                <Mic className="w-5 h-5" />
               )}
             </button>
+          )}
           ) : (
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
               <Mic className="w-4 h-4 text-muted-foreground" />
