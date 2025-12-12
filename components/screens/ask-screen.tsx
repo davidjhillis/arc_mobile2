@@ -683,15 +683,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                               <button
                                 key={source.id}
                                 onClick={() => {
+                                  console.log("[AskScreen] Source clicked:", source.id, source.title)
                                   if (onNavigate && source.id) {
+                                    console.log("[AskScreen] Navigating to doctrine-detail with id:", source.id)
                                     onNavigate("doctrine-detail", source.id)
+                                  } else {
+                                    console.warn("[AskScreen] Cannot navigate - onNavigate:", !!onNavigate, "source.id:", source.id)
                                   }
                                 }}
                                 className={cn(
                                   "px-3 py-2 rounded-lg text-left text-sm",
                                   "bg-primary/10 text-primary border border-primary/20",
                                   "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                  "flex items-center gap-2"
+                                  "flex items-center gap-2 cursor-pointer"
                                 )}
                                 title={source.title}
                               >
@@ -723,22 +727,22 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         </div>
       </div>
 
-      {/* Hidden audio element for TTS playback */}
-      {audioUrl && (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          onPlay={() => setIsPlayingAudio(true)}
-          onEnded={() => {
-            setIsPlayingAudio(false)
-            setAudioUrl(null)
-          }}
-          onError={() => {
-            setIsPlayingAudio(false)
-            setAudioUrl(null)
-          }}
-        />
-      )}
+      {/* Hidden audio element for TTS playback - always render to ensure it's available */}
+      <audio
+        ref={audioRef}
+        src={audioUrl || undefined}
+        onPlay={() => setIsPlayingAudio(true)}
+        onEnded={() => {
+          setIsPlayingAudio(false)
+          setAudioUrl(null)
+        }}
+        onError={(e) => {
+          console.error("[AskScreen] Audio playback error:", e)
+          setIsPlayingAudio(false)
+          setAudioUrl(null)
+        }}
+        preload="auto"
+      />
 
       {/* Input bar - fixed at bottom */}
       <div className="p-4 pb-6 border-t border-border bg-background">
