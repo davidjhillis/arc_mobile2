@@ -300,12 +300,21 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         const handleCanPlay = async () => {
           try {
             console.log("[AskScreen] Audio can play, starting playback")
+            // Ensure audio is still valid
+            if (!audioRef.current || audioRef.current.src !== audioUrl) {
+              console.warn("[AskScreen] Audio element changed, aborting play")
+              return
+            }
             audio.currentTime = 0
-            await audio.play()
-            console.log("[AskScreen] Audio playback started successfully")
+            const playPromise = audio.play()
+            if (playPromise !== undefined) {
+              await playPromise
+              console.log("[AskScreen] Audio playback started successfully")
+            }
           } catch (playError) {
             console.error("[AskScreen] Play error:", playError)
             setIsPlayingAudio(false)
+            // Don't clear audioUrl - might be recoverable
           }
         }
 
@@ -838,10 +847,12 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             code: error?.code,
             message: error?.message,
             networkState: audio.networkState,
-            readyState: audio.readyState
+            readyState: audio.readyState,
+            src: audio.src
           })
           setIsPlayingAudio(false)
-          // Don't clear audioUrl on error - might be recoverable
+          // Clear audioUrl on error to allow retry with new URL
+          setAudioUrl(null)
         }}
         onLoadStart={() => console.log("[AskScreen] Audio load start")}
         onLoadedData={() => console.log("[AskScreen] Audio loaded data")}

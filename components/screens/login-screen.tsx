@@ -85,6 +85,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
           <input
             type="email"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
