@@ -243,7 +243,20 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   // Handle audio playback
   useEffect(() => {
     if (audioUrl && audioRef.current) {
-      audioRef.current.play().catch(console.error)
+      // Ensure audio is loaded and ready before playing
+      const playAudio = async () => {
+        try {
+          // Reset audio to start
+          audioRef.current!.currentTime = 0
+          await audioRef.current!.play()
+          console.log("[AskScreen] Audio playback started:", audioUrl)
+        } catch (error) {
+          console.error("[AskScreen] Failed to play audio:", error)
+          setIsPlayingAudio(false)
+          setAudioUrl(null)
+        }
+      }
+      playAudio()
     }
   }, [audioUrl])
 
