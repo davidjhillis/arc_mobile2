@@ -44,7 +44,7 @@ async function generateAndSaveAudio(doctrineId: string, text: string, voice: str
         input: cleanText,
         voice: voice,
         response_format: "mp3",
-        speed: 1.0, // Normal speed for clarity
+        speed: 1.2, // 1.2× speed for faster playback
       }),
   })
 
