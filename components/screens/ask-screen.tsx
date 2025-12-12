@@ -225,7 +225,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: textToSpeak,
-          voice: "nova",
+          voice: "shimmer",
           doctrineId: `chat_${Date.now()}_${messageId || "temp"}`,
         }),
       })
@@ -254,7 +254,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: remaining.trim(),
-            voice: "nova",
+            voice: "shimmer",
             doctrineId: `chat_more_${Date.now()}_${messageId}`,
           }),
         })
@@ -429,6 +429,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       }
 
       let accumulatedContent = ""
+      let ttsStarted = false // Track if TTS has been initiated
 
       while (true) {
         const { done, value } = await reader.read()
@@ -459,11 +460,9 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 )
               }
               setIsLoading(false)
-              // Play TTS after streaming completes
-              if (accumulatedContent.trim()) {
-                setTimeout(async () => {
-                  await playAudioResponse(accumulatedContent, assistantMessageId)
-                }, 300)
+              // If TTS hasn't started yet, start it now with full content
+              if (accumulatedContent.trim() && !ttsStarted) {
+                playAudioResponse(accumulatedContent, assistantMessageId)
               }
               return
             }
@@ -490,6 +489,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                       : msg
                   )
                 )
+
+                // Start TTS immediately when we have ~50 words or first complete sentence
+                if (!ttsStarted && accumulatedContent.trim()) {
+                  const wordCount = accumulatedContent.split(/\s+/).length
+                  const hasCompleteSentence = /[.!?]\s/.test(accumulatedContent)
+                  
+                  // Start TTS if we have at least 50 words OR a complete sentence with 20+ words
+                  if (wordCount >= 50 || (hasCompleteSentence && wordCount >= 20)) {
+                    ttsStarted = true
+                    // Start TTS immediately with current content (will be updated as more streams in)
+                    playAudioResponse(accumulatedContent, assistantMessageId)
+                  }
+                }
               }
             } catch (e) {
               // Ignore parse errors for comments or invalid JSON
@@ -512,17 +524,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 ...msg, 
                 content: accumulatedContent, // Show full content in chat
                 fullContent: accumulatedContent,
+                sources: responseSources.length > 0 ? responseSources : undefined,
                 actions: finalActions.length > 0 ? finalActions : undefined,
               }
             : msg
         )
       )
       
-      // Play TTS for final response after streaming completes (short version first)
-      if (accumulatedContent.trim()) {
-        setTimeout(async () => {
-          await playAudioResponse(accumulatedContent, assistantMessageId)
-        }, 300)
+      // If TTS hasn't started yet, start it now
+      if (accumulatedContent.trim() && !ttsStarted) {
+        playAudioResponse(accumulatedContent, assistantMessageId)
       }
     } catch (error) {
       console.error("Ask AI error:", error)
@@ -739,22 +750,30 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                       
                       {/* Source links */}
                       {message.sources && message.sources.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <span className="text-[10px] text-muted-foreground">Sources:</span>
-                          {message.sources.map((source) => (
-                            <button
-                              key={source.id}
-                              onClick={() => {
-                                if (onNavigate && source.id) {
-                                  onNavigate("doctrine-detail", source.id)
-                                }
-                              }}
-                              className="text-[10px] px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-left max-w-[200px] truncate"
-                              title={source.title}
-                            >
-                              {source.title}
-                            </button>
-                          ))}
+                        <div className="flex flex-col gap-2 mt-4">
+                          <span className="text-xs text-muted-foreground font-medium">Source content:</span>
+                          <div className="flex flex-col gap-2">
+                            {message.sources.map((source) => (
+                              <button
+                                key={source.id}
+                                onClick={() => {
+                                  if (onNavigate && source.id) {
+                                    onNavigate("doctrine-detail", source.id)
+                                  }
+                                }}
+                                className={cn(
+                                  "px-3 py-2 rounded-lg text-left text-sm",
+                                  "bg-primary/10 text-primary border border-primary/20",
+                                  "hover:bg-primary/20 active:scale-[0.98] transition-all",
+                                  "flex items-center gap-2"
+                                )}
+                                title={source.title}
+                              >
+                                <BookOpen className="w-4 h-4 flex-shrink-0" />
+                                <span className="truncate">{source.title}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
