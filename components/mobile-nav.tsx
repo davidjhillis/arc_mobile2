@@ -116,14 +116,14 @@ export function MobileNav({ activeScreen, onNavigate, onVoiceTranscript }: Mobil
                     "text-primary-foreground"
                   )} />
                 ) : (
-                  <Icon
-                    className={cn(
-                      "w-5 h-5",
-                      isActive ? "text-primary" : "text-muted-foreground",
-                      isAsk && isActive && "text-primary-foreground w-4 h-4",
-                      isAsk && !isActive && "w-4 h-4",
-                    )}
-                  />
+                <Icon
+                  className={cn(
+                    "w-5 h-5",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                    isAsk && isActive && "text-primary-foreground w-4 h-4",
+                    isAsk && !isActive && "w-4 h-4",
+                  )}
+                />
                 )}
                 {/* Voice indicator rings */}
                 {isAsk && isListening && (

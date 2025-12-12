@@ -935,11 +935,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               )}
             </button>
           )}
-          ) : (
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
-              <Mic className="w-4 h-4 text-muted-foreground" />
-            </div>
-          )}
           {/* Voice transcript display */}
           {(isListening || transcript || interimTranscript) && (
             <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
