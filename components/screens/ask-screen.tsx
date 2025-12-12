@@ -268,104 +268,68 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     }
   }
 
-  // Handle audio playback
+  // Handle audio playback - simplified and more reliable
   useEffect(() => {
-    if (!audioUrl || !audioRef.current || !ttsEnabled) {
-      if (!ttsEnabled && audioRef.current) {
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (!audioUrl || !ttsEnabled) {
+      if (!ttsEnabled) {
         // Stop audio if TTS is disabled
-        audioRef.current.pause()
-        setAudioUrl(null)
+        audio.pause()
+        audio.currentTime = 0
         setIsPlayingAudio(false)
       }
       return
     }
 
-    // Store current audioUrl to check against in handlers
-    const currentAudioUrl = audioUrl
-    const audio = audioRef.current
+    console.log("[AskScreen] useEffect triggered for audioUrl:", audioUrl)
     
-    // Ensure audio is loaded and ready before playing
-    const playAudio = async () => {
-      if (!audio) return
-
-      try {
-        console.log("[AskScreen] Loading audio:", currentAudioUrl)
-        
-        // Set up error handlers before loading
-        const handleError = (e: Event) => {
-          const errorAudio = e.currentTarget as HTMLAudioElement
-          const error = errorAudio.error
-          console.error("[AskScreen] Audio error event:", {
-            error,
-            code: error?.code,
-            message: error?.message,
-            networkState: errorAudio.networkState,
-            readyState: errorAudio.readyState,
-            src: errorAudio.src,
-            expectedUrl: currentAudioUrl
-          })
-          setIsPlayingAudio(false)
-          // Only clear if this is still the current audio URL
-          if (audioRef.current?.src === currentAudioUrl || !audioRef.current?.src) {
-            setAudioUrl(null)
-          }
-        }
-
-        const handleCanPlay = async () => {
-          try {
-            console.log("[AskScreen] Audio can play, starting playback")
-            // Ensure audio is still valid and matches current URL
-            if (!audioRef.current || audioRef.current.src !== currentAudioUrl) {
-              console.warn("[AskScreen] Audio element changed, aborting play", {
-                currentSrc: audioRef.current?.src,
-                expectedUrl: currentAudioUrl
-              })
-              return
-            }
-            const playAudio = audioRef.current
-            playAudio.currentTime = 0
-            const playPromise = playAudio.play()
-            if (playPromise !== undefined) {
-              await playPromise
-              console.log("[AskScreen] Audio playback started successfully")
-            }
-          } catch (playError) {
-            console.error("[AskScreen] Play error:", playError)
-            setIsPlayingAudio(false)
-            // Clear audioUrl on play error
-            if (audioRef.current?.src === currentAudioUrl) {
-              setAudioUrl(null)
-            }
-          }
-        }
-
-        // Remove old listeners to prevent duplicates
-        audio.removeEventListener('canplay', handleCanPlay)
-        audio.removeEventListener('error', handleError)
-        
-        // Add new listeners
-        audio.addEventListener('canplay', handleCanPlay, { once: true })
-        audio.addEventListener('error', handleError, { once: true })
-        
-        // Reset audio element completely before loading new source
-        audio.pause()
-        audio.currentTime = 0
-        
-        // Load the new source
-        audio.load()
-      } catch (error) {
-        console.error("[AskScreen] Failed to setup audio:", error)
+    // Simple approach: set src and let browser handle loading/playing
+    const handleCanPlay = () => {
+      console.log("[AskScreen] Audio can play, attempting playback")
+      audio.play().then(() => {
+        console.log("[AskScreen] Audio playback started successfully")
+        setIsPlayingAudio(true)
+      }).catch((error) => {
+        console.error("[AskScreen] Play failed:", error)
         setIsPlayingAudio(false)
-        setAudioUrl(null)
-      }
+      })
     }
-    
-    playAudio()
-    
-    // Cleanup function
-    return () => {
-      // Don't cleanup here - let the audio element handle its own lifecycle
+
+    const handleError = () => {
+      const error = audio.error
+      console.error("[AskScreen] Audio error:", {
+        code: error?.code,
+        message: error?.message,
+        networkState: audio.networkState,
+        readyState: audio.readyState
+      })
+      setIsPlayingAudio(false)
     }
+
+    // Remove old listeners
+    audio.removeEventListener('canplay', handleCanPlay)
+    audio.removeEventListener('error', handleError)
+    audio.removeEventListener('ended', () => {
+      setIsPlayingAudio(false)
+      setAudioUrl(null)
+    })
+    
+    // Add new listeners
+    audio.addEventListener('canplay', handleCanPlay, { once: true })
+    audio.addEventListener('error', handleError, { once: true })
+    audio.addEventListener('ended', () => {
+      console.log("[AskScreen] Audio ended")
+      setIsPlayingAudio(false)
+      setAudioUrl(null)
+    }, { once: true })
+    
+    // Reset and load
+    audio.pause()
+    audio.currentTime = 0
+    audio.load()
+    
   }, [audioUrl, ttsEnabled])
 
   const scrollToBottom = () => {
@@ -900,10 +864,10 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         preload="auto"
       />
 
-      {/* Input bar - fixed at bottom */}
-      <div className="p-4 pb-6 border-t border-border bg-background">
-        <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
-          {/* TTS Toggle button */}
+      {/* Input bar - fixed at bottom - Mobile-first simplified design */}
+      <div className="p-3 pb-safe border-t border-border bg-background">
+        {/* TTS Toggle - Compact, top right */}
+        <div className="flex justify-end mb-1.5">
           <button
             onClick={() => {
               const newTtsEnabled = !ttsEnabled
@@ -917,20 +881,30 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               }
             }}
             className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+              "px-2.5 py-1 rounded-lg text-xs flex items-center gap-1.5",
               "transition-all duration-200",
               ttsEnabled
-                ? "bg-primary/10 text-primary hover:bg-primary/20"
-                : "bg-muted text-muted-foreground hover:bg-muted/80",
+                ? "bg-primary/10 text-primary"
+                : "bg-muted/50 text-muted-foreground",
             )}
-            title={ttsEnabled ? "Disable voice responses" : "Enable voice responses"}
+            title={ttsEnabled ? "Voice on" : "Voice off"}
           >
             {ttsEnabled ? (
-              <Volume2 className="w-4 h-4" />
+              <>
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Voice</span>
+              </>
             ) : (
-              <VolumeX className="w-4 h-4" />
+              <>
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Voice</span>
+              </>
             )}
           </button>
+        </div>
+        
+        {/* Main input area */}
+        <div className="flex items-end gap-2">
           {/* Voice input button */}
           {isVoiceSupported ? (
             <button
