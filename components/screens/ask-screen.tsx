@@ -349,7 +349,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     
     try {
       // Find relevant articles for context (only for actual questions)
-      const { context: relevantContext, sources } = findRelevantArticles(messageText)
+      let { context: relevantContext, sources } = findRelevantArticles(messageText)
       responseSources = sources
       
       // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
@@ -359,11 +359,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         // Check if daily-tactics-planning is already in sources
         const hasDailyTactics = responseSources.some(s => s.id === "daily-tactics-planning")
         if (!hasDailyTactics) {
-          // Add it to sources
-          responseSources.push({
-            id: "daily-tactics-planning",
-            title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
-          })
+          // Add the article to context and sources
+          const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
+          if (dailyTacticsArticle) {
+            const articleContext = `---\nArticle: ${dailyTacticsArticle.title}\nCategory: ${dailyTacticsArticle.category}\nSummary: ${dailyTacticsArticle.summary}\n\nContent:\n${dailyTacticsArticle.content.substring(0, 4000)}\n---`
+            relevantContext = relevantContext ? `${relevantContext}\n\n${articleContext}` : articleContext
+            responseSources.push({
+              id: "daily-tactics-planning",
+              title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
+            })
+          }
         }
       }
       
