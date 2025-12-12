@@ -208,6 +208,14 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   // Play TTS for AI response - full content, no splitting
   const playAudioResponse = async (text: string, messageId?: string) => {
     try {
+      // Stop any currently playing audio first
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+      setAudioUrl(null)
+      setIsPlayingAudio(false)
+      
       // Play full content - no splitting to ensure complete playback
       const response = await fetch("/api/ai/tts", {
         method: "POST",
@@ -354,21 +362,20 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       
       // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
       const questionLower = messageText.toLowerCase()
-      const is215Question = /who.*215|who.*completes.*215|who.*fills.*215|who.*does.*215|215.*who/i.test(questionLower)
+      const is215Question = /who.*215|who.*completes.*215|who.*fills.*215|who.*does.*215|215.*who|form.*215|who.*form.*215/i.test(questionLower)
       if (is215Question) {
-        // Check if daily-tactics-planning is already in sources
-        const hasDailyTactics = responseSources.some(s => s.id === "daily-tactics-planning")
-        if (!hasDailyTactics) {
-          // Add the article to context and sources
-          const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
-          if (dailyTacticsArticle) {
-            const articleContext = `---\nArticle: ${dailyTacticsArticle.title}\nCategory: ${dailyTacticsArticle.category}\nSummary: ${dailyTacticsArticle.summary}\n\nContent:\n${dailyTacticsArticle.content.substring(0, 4000)}\n---`
-            relevantContext = relevantContext ? `${relevantContext}\n\n${articleContext}` : articleContext
-            responseSources.push({
-              id: "daily-tactics-planning",
-              title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
-            })
-          }
+        // For 215 questions, prioritize daily-tactics-planning - make it the primary source
+        const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
+        if (dailyTacticsArticle) {
+          const articleContext = `---\nArticle: ${dailyTacticsArticle.title}\nCategory: ${dailyTacticsArticle.category}\nSummary: ${dailyTacticsArticle.summary}\n\nContent:\n${dailyTacticsArticle.content.substring(0, 4000)}\n---`
+          // Put daily-tactics-planning first in context and sources
+          relevantContext = relevantContext ? `${articleContext}\n\n${relevantContext}` : articleContext
+          // Remove any existing daily-tactics-planning and add it first
+          responseSources = responseSources.filter(s => s.id !== "daily-tactics-planning")
+          responseSources.unshift({
+            id: "daily-tactics-planning",
+            title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
+          })
         }
       }
       
