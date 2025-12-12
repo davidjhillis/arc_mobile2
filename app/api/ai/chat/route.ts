@@ -112,10 +112,12 @@ CONVERSATION FLOW:
                   const json = JSON.parse(data)
                   const content = json.choices?.[0]?.delta?.content
                   if (content) {
+                    // Ensure content is sent properly - don't skip empty strings that might be important
                     controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content })}\n\n`))
                   }
                 } catch (e) {
                   // Ignore parse errors for comments
+                  console.warn("[Chat API] Failed to parse SSE chunk:", e, data)
                 }
               }
             }
