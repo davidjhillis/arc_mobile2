@@ -664,82 +664,140 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           </div>
         </div>
 
-        {/* Input bar */}
+        {/* Input bar - Google AI style */}
         <div className="p-4 pb-6">
-          <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
-            {/* Voice input button */}
-            {isVoiceSupported ? (
-              <button
-                onClick={() => {
-                  console.log("[AskScreen] Mic button clicked, isListening:", isListening)
-                  if (isListening) {
-                    stopListening()
-                    setIsVoiceActive(false)
-                    resetVoice()
-                  } else {
-                    setIsVoiceActive(true)
-                    console.log("[AskScreen] Starting voice recognition...")
-                    startListening()
-                  }
-                }}
-                className={cn(
-                  "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-                  "transition-all duration-200",
-                  isListening
-                    ? "bg-primary text-primary-foreground animate-pulse"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80",
-                )}
-                title={isListening ? "Stop listening" : "Start voice input"}
-              >
-                {isListening ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
-              </button>
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
-                <Mic className="w-4 h-4 text-muted-foreground" />
-              </div>
+          {/* Main input container */}
+          <div 
+            className={cn(
+              "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
+              "shadow-sm hover:shadow-md",
+              (input.trim() || isListening) 
+                ? "border-primary/30 shadow-primary/5" 
+                : "border-border",
             )}
-            <div className="flex-1 flex flex-col min-w-0">
+          >
+            {/* Textarea container */}
+            <div className="flex items-end">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value)
+                  // Auto-expand textarea
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Listening..." : "Ask a question..."}
+                onFocus={(e) => {
+                  // Expand to minimum focused height
+                  if (e.target.scrollHeight < 56) {
+                    e.target.style.height = '56px'
+                  }
+                }}
+                onBlur={(e) => {
+                  // Collapse if empty
+                  if (!input.trim()) {
+                    e.target.style.height = 'auto'
+                  }
+                }}
+                placeholder={isListening ? "Listening..." : "Ask anything about Red Cross doctrine..."}
                 rows={1}
                 autoComplete="off"
                 className={cn(
-                  "w-full px-2 py-2 bg-transparent resize-none overflow-hidden",
-                  "text-sm text-foreground placeholder:text-muted-foreground",
-                  "focus:outline-none",
-                  "min-h-[2.5rem] max-h-[200px]",
-                  isListening && "opacity-50",
+                  "flex-1 px-5 py-4 bg-transparent resize-none",
+                  "text-base text-foreground placeholder:text-muted-foreground/70",
+                  "focus:outline-none focus:placeholder:text-muted-foreground/50",
+                  "min-h-[56px] max-h-[200px] leading-relaxed",
+                  "transition-all duration-200",
+                  isListening && "text-primary",
                 )}
                 disabled={isListening}
               />
-              {/* Voice transcript display - never truncated, shown below textarea */}
-              {(isListening || transcript || interimTranscript) && (
-                <div className="w-full px-2 py-1 text-xs text-muted-foreground italic break-words whitespace-pre-wrap">
-                  {transcript || interimTranscript || "Listening..."}
-                </div>
-              )}
+              
+              {/* Action buttons - inside the input */}
+              <div className="flex items-center gap-1 pr-3 pb-3">
+                {/* Voice input button */}
+                {isVoiceSupported && (
+                  <button
+                    onClick={() => {
+                      if (isListening) {
+                        stopListening()
+                        setIsVoiceActive(false)
+                        resetVoice()
+                      } else {
+                        setIsVoiceActive(true)
+                        startListening()
+                      }
+                    }}
+                    className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center",
+                      "transition-all duration-200",
+                      isListening
+                        ? "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    )}
+                    title={isListening ? "Stop listening" : "Voice input"}
+                  >
+                    {isListening ? (
+                      <div className="relative">
+                        <MicOff className="w-5 h-5" />
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-ping" />
+                      </div>
+                    ) : (
+                      <Mic className="w-5 h-5" />
+                    )}
+                  </button>
+                )}
+                
+                {/* Send button - appears when there's input */}
+                <button
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || isListening}
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center",
+                    "transition-all duration-300 ease-out",
+                    input.trim() && !isListening 
+                      ? "bg-primary text-primary-foreground scale-100 opacity-100 shadow-lg shadow-primary/30" 
+                      : "bg-transparent text-muted-foreground scale-90 opacity-50",
+                  )}
+                >
+                  <ArrowUp className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isListening}
-              className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-                "transition-all duration-200",
-                input.trim() && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-              )}
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
+            
+            {/* Voice transcript - floating below input */}
+            {(isListening || transcript || interimTranscript) && (
+              <div className="px-5 py-3 border-t border-border/50 text-sm text-primary animate-pulse">
+                {transcript || interimTranscript || "Listening..."}
+              </div>
+            )}
+            
+            {/* TTS toggle - subtle pill at bottom */}
+            <div className="flex justify-center py-2 border-t border-border/30">
+              <button
+                onClick={() => {
+                  const newTtsEnabled = !ttsEnabled
+                  setTtsEnabled(newTtsEnabled)
+                  if (!newTtsEnabled && audioRef.current) {
+                    audioRef.current.pause()
+                    audioRef.current.currentTime = 0
+                    setAudioUrl(null)
+                    setIsPlayingAudio(false)
+                  }
+                }}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5",
+                  "transition-all duration-200",
+                  ttsEnabled
+                    ? "text-primary"
+                    : "text-muted-foreground",
+                )}
+              >
+                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                <span>{ttsEnabled ? "Voice responses on" : "Voice responses off"}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -863,112 +921,140 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         preload="auto"
       />
 
-      {/* Input bar - fixed at bottom - Mobile-first simplified design */}
-      <div className="p-3 pb-safe border-t border-border bg-background">
-        {/* TTS Toggle - Compact, top right */}
-        <div className="flex justify-end mb-1.5">
-          <button
-            onClick={() => {
-              const newTtsEnabled = !ttsEnabled
-              setTtsEnabled(newTtsEnabled)
-              // Stop audio if disabling TTS
-              if (!newTtsEnabled && audioRef.current) {
-                audioRef.current.pause()
-                audioRef.current.currentTime = 0
-                setAudioUrl(null)
-                setIsPlayingAudio(false)
-              }
-            }}
-            className={cn(
-              "px-2.5 py-1 rounded-lg text-xs flex items-center gap-1.5",
-              "transition-all duration-200",
-              ttsEnabled
-                ? "bg-primary/10 text-primary"
-                : "bg-muted/50 text-muted-foreground",
-            )}
-            title={ttsEnabled ? "Voice on" : "Voice off"}
-          >
-            {ttsEnabled ? (
-              <>
-                <Volume2 className="w-3.5 h-3.5" />
-                <span>Voice</span>
-              </>
-            ) : (
-              <>
-                <VolumeX className="w-3.5 h-3.5" />
-                <span>Voice</span>
-              </>
-            )}
-          </button>
-        </div>
-        
-        {/* Main input area */}
-        <div className="flex items-end gap-2">
-          {/* Voice input button - Primary action */}
-          {isVoiceSupported && (
-            <button
-              onClick={() => {
-                if (isListening) {
-                  stopListening()
-                  setIsVoiceActive(false)
-                  resetVoice()
-                } else {
-                  setIsVoiceActive(true)
-                  startListening()
+      {/* Input bar - Google AI style */}
+      <div className="p-4 pb-safe bg-background">
+        {/* Main input container */}
+        <div 
+          className={cn(
+            "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
+            "shadow-sm",
+            (input.trim() || isListening) 
+              ? "border-primary/30 shadow-md shadow-primary/5" 
+              : "border-border hover:shadow-md",
+          )}
+        >
+          {/* Textarea container */}
+          <div className="flex items-end">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value)
+                // Auto-expand textarea
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={(e) => {
+                if (e.target.scrollHeight < 48) {
+                  e.target.style.height = '48px'
                 }
               }}
+              onBlur={(e) => {
+                if (!input.trim()) {
+                  e.target.style.height = 'auto'
+                }
+              }}
+              placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
+              rows={1}
+              autoComplete="off"
               className={cn(
-                "w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0",
+                "flex-1 px-5 py-3.5 bg-transparent resize-none",
+                "text-base text-foreground placeholder:text-muted-foreground/70",
+                "focus:outline-none",
+                "min-h-[48px] max-h-[160px] leading-relaxed",
                 "transition-all duration-200",
-                isListening
-                  ? "bg-primary text-primary-foreground animate-pulse shadow-lg"
-                  : input.trim() 
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-primary text-primary-foreground",
+                isListening && "text-primary",
               )}
-              title={isListening ? "Stop listening" : "Voice input"}
-            >
-              {isListening ? (
-                <MicOff className="w-5 h-5" />
-              ) : (
-                <Mic className="w-5 h-5" />
+              disabled={isListening}
+            />
+            
+            {/* Action buttons - inside the input */}
+            <div className="flex items-center gap-1 pr-2 pb-2">
+              {/* Voice input button */}
+              {isVoiceSupported && (
+                <button
+                  onClick={() => {
+                    if (isListening) {
+                      stopListening()
+                      setIsVoiceActive(false)
+                      resetVoice()
+                    } else {
+                      setIsVoiceActive(true)
+                      startListening()
+                    }
+                  }}
+                  className={cn(
+                    "w-9 h-9 rounded-full flex items-center justify-center",
+                    "transition-all duration-200",
+                    isListening
+                      ? "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  )}
+                  title={isListening ? "Stop listening" : "Voice input"}
+                >
+                  {isListening ? (
+                    <div className="relative">
+                      <MicOff className="w-4 h-4" />
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                    </div>
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                </button>
               )}
-            </button>
-          )}
-          {/* Voice transcript display */}
+              
+              {/* TTS toggle - subtle */}
+              <button
+                onClick={() => {
+                  const newTtsEnabled = !ttsEnabled
+                  setTtsEnabled(newTtsEnabled)
+                  if (!newTtsEnabled && audioRef.current) {
+                    audioRef.current.pause()
+                    audioRef.current.currentTime = 0
+                    setAudioUrl(null)
+                    setIsPlayingAudio(false)
+                  }
+                }}
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center",
+                  "transition-all duration-200",
+                  ttsEnabled
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                )}
+                title={ttsEnabled ? "Voice on" : "Voice off"}
+              >
+                {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </button>
+              
+              {/* Send button */}
+              <button
+                onClick={() => handleSend()}
+                disabled={!input.trim() || isLoading || isListening}
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center",
+                  "transition-all duration-300 ease-out",
+                  input.trim() && !isLoading && !isListening 
+                    ? "bg-primary text-primary-foreground scale-100 opacity-100 shadow-md shadow-primary/30" 
+                    : "bg-transparent text-muted-foreground scale-90 opacity-40",
+                )}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+          
+          {/* Voice transcript - floating below input */}
           {(isListening || transcript || interimTranscript) && (
-            <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
-              {transcript || interimTranscript || "Listening..."}
+            <div className="px-5 py-2.5 border-t border-border/50 text-sm text-primary">
+              <span className="animate-pulse">{transcript || interimTranscript || "Listening..."}</span>
             </div>
           )}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
-            rows={1}
-            autoComplete="off"
-            className={cn(
-              "flex-1 px-2 py-2 bg-transparent resize-none",
-              "text-sm text-foreground placeholder:text-muted-foreground",
-              "focus:outline-none",
-              "max-h-24",
-              isListening && "opacity-50",
-            )}
-            disabled={isListening}
-          />
-          <button
-            onClick={() => handleSend()}
-            disabled={!input.trim() || isLoading || isListening}
-            className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-              "transition-all duration-200",
-              input.trim() && !isLoading && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-          >
-            <ArrowUp className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>
