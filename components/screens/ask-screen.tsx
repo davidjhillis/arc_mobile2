@@ -560,7 +560,11 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               setIsLoading(false)
               // Start TTS with full response after streaming completes
               if (accumulatedContent.trim()) {
-                playAudioResponse(accumulatedContent, assistantMessageId)
+                console.log("[AskScreen] Streaming complete, starting TTS for message:", assistantMessageId)
+                // Small delay to ensure state is updated
+                setTimeout(() => {
+                  playAudioResponse(accumulatedContent, assistantMessageId)
+                }, 100)
               }
               return
             }
@@ -632,9 +636,13 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         )
       )
       
-      // If TTS hasn't started yet, start it now
-      if (accumulatedContent.trim() && !ttsStarted) {
-        playAudioResponse(accumulatedContent, assistantMessageId)
+      // Start TTS with full response after streaming completes
+      if (accumulatedContent.trim()) {
+        console.log("[AskScreen] Streaming complete (fallback), starting TTS for message:", assistantMessageId)
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          playAudioResponse(accumulatedContent, assistantMessageId)
+        }, 100)
       }
     } catch (error) {
       console.error("Ask AI error:", error)
