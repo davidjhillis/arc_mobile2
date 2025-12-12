@@ -1257,7 +1257,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               text: doctrine.content,
-              voice: "nova",
+              voice: "shimmer",
               doctrineId: doctrineId
             }),
           })
