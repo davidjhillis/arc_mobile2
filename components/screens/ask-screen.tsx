@@ -13,7 +13,6 @@ interface Message {
   content: string
   fullContent?: string // Full content if truncated for TTS
   sources?: Array<{ id: string; title: string }>
-  actions?: string[] // Suggested action buttons
   hasMore?: boolean // Whether there's more content to hear
 }
 
@@ -101,11 +100,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         role: "assistant",
         content: greetingText,
         sources: undefined,
-        actions: [
-          "How do I set up a shelter?",
-          "What are Mass Care operations?",
-          "Find information about feeding protocols",
-        ],
       }
       setMessages([greetingMessage])
       // Auto-play greeting TTS
@@ -121,6 +115,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       handleSend(initialMessage)
     }
   }, [initialMessage])
+
+  // Auto-resize textarea when input or transcript changes
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      const scrollHeight = inputRef.current.scrollHeight
+      inputRef.current.style.height = `${Math.min(scrollHeight, 200)}px`
+    }
+  }, [input, transcript, interimTranscript])
 
   // Check if input is a greeting (not a question) - only for first user message
   const isGreeting = (text: string, isFirstUserMessage: boolean): boolean => {
@@ -202,29 +205,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     return { short: shortText, remaining }
   }
 
-  // Play TTS for AI response (short version first)
+  // Play TTS for AI response - full content, no splitting
   const playAudioResponse = async (text: string, messageId?: string) => {
     try {
-      // Split into short and remaining
-      const { short, remaining } = splitTextForTTS(text)
-      const textToSpeak = short.trim()
-      
-      // If there's remaining content, mark message as having more (but keep full content visible)
-      if (remaining.trim() && messageId) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === messageId
-              ? { ...msg, hasMore: true, fullContent: text } // Keep full content, just mark as having more
-              : msg
-          )
-        )
-      }
-
+      // Play full content - no splitting to ensure complete playback
       const response = await fetch("/api/ai/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: textToSpeak,
+          text: text.trim(),
           voice: "shimmer",
           doctrineId: `chat_${Date.now()}_${messageId || "temp"}`,
         }),
@@ -240,41 +229,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     } catch (error) {
       console.error("TTS error:", error)
       // Don't show error to user, just skip TTS
-    }
-  }
-
-  // Play remaining content
-  const playMoreAudio = async (messageId: string, fullContent: string) => {
-    const { remaining } = splitTextForTTS(fullContent)
-    if (remaining.trim()) {
-      // Play the remaining content
-      try {
-        const response = await fetch("/api/ai/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: remaining.trim(),
-            voice: "shimmer",
-            doctrineId: `chat_more_${Date.now()}_${messageId}`,
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          if (data.audioUrl) {
-            setAudioUrl(data.audioUrl)
-            setIsPlayingAudio(true)
-            // Mark as no longer having more after playing
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === messageId ? { ...msg, hasMore: false } : msg
-              )
-            )
-          }
-        }
-      } catch (error) {
-        console.error("TTS error:", error)
-      }
     }
   }
 
@@ -370,12 +324,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         role: "assistant",
         content: greetingResponse,
         sources: undefined,
-        actions: [
-          "How do I set up a shelter?",
-          "What are Mass Care operations?",
-          "Find information about feeding protocols",
-          "Explain disaster response procedures",
-        ],
       }
       
       setMessages((prev) => [...prev, greetingReply])
@@ -444,7 +392,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             if (data === "[DONE]") {
               // Final update before ending
               if (accumulatedContent.trim()) {
-                const finalActions = extractActions(accumulatedContent)
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -453,7 +400,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           content: accumulatedContent,
                           fullContent: accumulatedContent,
                           sources: responseSources.length > 0 ? responseSources : undefined,
-                          actions: finalActions.length > 0 ? finalActions : undefined,
                         }
                       : msg
                   )
@@ -472,9 +418,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               const content = json.content
               if (content) {
                 accumulatedContent += content
-                // Extract actions from content
-                const extractedActions = extractActions(accumulatedContent)
-                
                 // Update the assistant message with accumulated content (ensure it's always visible)
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -484,7 +427,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           content: accumulatedContent, // Always show full content as it streams
                           fullContent: accumulatedContent,
                           sources: responseSources.length > 0 ? responseSources : undefined,
-                          actions: extractedActions.length > 0 ? extractedActions : undefined,
                         }
                       : msg
                   )
@@ -513,10 +455,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
       setIsLoading(false)
       
-      // Extract actions from final content and update message
-      const finalActions = extractActions(accumulatedContent)
-      
-      // Update message with full content and actions
+      // Update message with full content
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
@@ -525,7 +464,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 content: accumulatedContent, // Show full content in chat
                 fullContent: accumulatedContent,
                 sources: responseSources.length > 0 ? responseSources : undefined,
-                actions: finalActions.length > 0 ? finalActions : undefined,
               }
             : msg
         )
@@ -630,29 +568,33 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 <Mic className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
-            {/* Voice transcript display */}
-            {(isListening || transcript || interimTranscript) && (
-              <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
-                {transcript || interimTranscript || "Listening..."}
-              </div>
-            )}
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isListening ? "Listening..." : "Ask a question..."}
-              rows={1}
-              autoComplete="off"
-              className={cn(
-                "flex-1 px-2 py-2 bg-transparent resize-none",
-                "text-sm text-foreground placeholder:text-muted-foreground",
-                "focus:outline-none",
-                "max-h-24",
-                isListening && "opacity-50",
+            <div className="flex-1 flex flex-col min-w-0">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={isListening ? "Listening..." : "Ask a question..."}
+                rows={1}
+                autoComplete="off"
+                className={cn(
+                  "w-full px-2 py-2 bg-transparent resize-none overflow-hidden",
+                  "text-sm text-foreground placeholder:text-muted-foreground",
+                  "focus:outline-none",
+                  "min-h-[2.5rem] max-h-[200px]",
+                  isListening && "opacity-50",
+                )}
+                disabled={isListening}
+              />
+              {/* Voice transcript display - never truncated, shown below textarea */}
+              {(isListening || transcript || interimTranscript) && (
+                <div className="w-full px-2 py-1 text-xs text-muted-foreground italic break-words whitespace-pre-wrap">
+                  {transcript || interimTranscript || "Listening..."}
+                </div>
               )}
-              disabled={isListening}
-            />
+            </div>
             <button
               onClick={() => handleSend()}
               disabled={!input.trim() || isListening}
@@ -691,62 +633,10 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                       <Sparkles className="w-3.5 h-3.5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      {/* Show full content if available, otherwise show content */}
+                      {/* Show full content */}
                       <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                         {message.fullContent || message.content}
                       </p>
-                      
-                      {/* "Hear more" button if content was truncated */}
-                      {message.hasMore && message.fullContent && (
-                        <button
-                          onClick={() => playMoreAudio(message.id, message.fullContent!)}
-                          className={cn(
-                            "mt-3 px-4 py-2 rounded-lg text-sm",
-                            "bg-primary/10 text-primary border border-primary/20",
-                            "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                            "flex items-center gap-2"
-                          )}
-                        >
-                          <Mic className="w-4 h-4" />
-                          Hear more
-                        </button>
-                      )}
-                      
-                      {/* Action buttons */}
-                      {message.actions && message.actions.length > 0 && (
-                        <div className="flex flex-col gap-2 mt-4">
-                          <span className="text-xs text-muted-foreground font-medium">Suggested actions:</span>
-                          <div className="flex flex-col gap-2">
-                            {message.actions.map((action, idx) => (
-                              <div key={idx} className="flex gap-2">
-                                <button
-                                  onClick={() => handleActionClick(action, false)}
-                                  className={cn(
-                                    "flex-1 px-3 py-2 rounded-lg text-left text-sm",
-                                    "bg-primary/10 text-primary border border-primary/20",
-                                    "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                  )}
-                                >
-                                  {action}
-                                </button>
-                                {isVoiceSupported && (
-                                  <button
-                                    onClick={() => handleActionClick(action, true)}
-                                    className={cn(
-                                      "w-10 h-10 rounded-lg flex items-center justify-center",
-                                      "bg-primary/10 text-primary border border-primary/20",
-                                      "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                    )}
-                                    title="Say this with voice"
-                                  >
-                                    <Mic className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                       
                       {/* Source links */}
                       {message.sources && message.sources.length > 0 && (
