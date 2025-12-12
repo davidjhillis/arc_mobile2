@@ -470,8 +470,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         )
       )
       
-      // If TTS hasn't started yet, start it now
-      if (accumulatedContent.trim() && !ttsStarted) {
+      // Start TTS with full response after streaming completes
+      if (accumulatedContent.trim()) {
         playAudioResponse(accumulatedContent, assistantMessageId)
       }
     } catch (error) {
