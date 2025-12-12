@@ -256,10 +256,22 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
   // Handle audio playback
   useEffect(() => {
-    if (audioUrl && audioRef.current) {
+    if (audioUrl && audioRef.current && ttsEnabled) {
       // Ensure audio is loaded and ready before playing
       const playAudio = async () => {
         try {
+          // Load the new source
+          audioRef.current!.load()
+          // Wait for audio to be ready
+          await new Promise((resolve) => {
+            if (audioRef.current) {
+              audioRef.current.oncanplay = resolve
+              audioRef.current.onerror = () => {
+                console.error("[AskScreen] Audio load error")
+                resolve(null)
+              }
+            }
+          })
           // Reset audio to start
           audioRef.current!.currentTime = 0
           await audioRef.current!.play()
@@ -271,8 +283,13 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         }
       }
       playAudio()
+    } else if (!ttsEnabled && audioRef.current) {
+      // Stop audio if TTS is disabled
+      audioRef.current.pause()
+      setAudioUrl(null)
+      setIsPlayingAudio(false)
     }
-  }, [audioUrl])
+  }, [audioUrl, ttsEnabled])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
