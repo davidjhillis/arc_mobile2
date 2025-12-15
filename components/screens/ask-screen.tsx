@@ -733,22 +733,22 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                     }
                   }}
                   className={cn(
-                    "w-12 h-12 rounded-full flex items-center justify-center",
-                    "transition-all duration-300 ease-out",
+                    "w-9 h-9 rounded-full flex items-center justify-center",
+                    "transition-all duration-200",
                     isListening
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110"
+                      ? "bg-primary text-primary-foreground"
                       : input.trim()
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                        ? "bg-primary text-primary-foreground"
                         : "bg-muted/80 text-foreground hover:bg-muted",
                   )}
                   title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
                 >
                   {isListening ? (
-                    <Square className="w-5 h-5 fill-current" />
+                    <Square className="w-3.5 h-3.5 fill-current" />
                   ) : input.trim() ? (
-                    <ArrowUp className="w-5 h-5" />
+                    <ArrowUp className="w-4 h-4" />
                   ) : (
-                    <AudioLines className="w-5 h-5" />
+                    <AudioLines className="w-4 h-4" />
                   )}
                 </button>
               </div>
@@ -756,36 +756,37 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             
             {/* Voice transcript - floating below input */}
             {(isListening || transcript || interimTranscript) && (
-              <div className="px-5 py-3 border-t border-border/50 text-sm text-primary animate-pulse">
-                {transcript || interimTranscript || "Listening..."}
+              <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
+                <AudioLines className="w-4 h-4 animate-pulse" />
+                <span>{transcript || interimTranscript || "Listening..."}</span>
               </div>
             )}
-            
-            {/* TTS toggle - subtle pill at bottom */}
-            <div className="flex justify-center py-2 border-t border-border/30">
-              <button
-                onClick={() => {
-                  const newTtsEnabled = !ttsEnabled
-                  setTtsEnabled(newTtsEnabled)
-                  if (!newTtsEnabled && audioRef.current) {
-                    audioRef.current.pause()
-                    audioRef.current.currentTime = 0
-                    setAudioUrl(null)
-                    setIsPlayingAudio(false)
-                  }
-                }}
-                className={cn(
-                  "px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5",
-                  "transition-all duration-200",
-                  ttsEnabled
-                    ? "text-primary"
-                    : "text-muted-foreground",
-                )}
-              >
-                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                <span>{ttsEnabled ? "Voice responses on" : "Voice responses off"}</span>
-              </button>
-            </div>
+          </div>
+          
+          {/* Voice toggle - below input */}
+          <div className="flex justify-center pt-3">
+            <button
+              onClick={() => {
+                const newTtsEnabled = !ttsEnabled
+                setTtsEnabled(newTtsEnabled)
+                if (!newTtsEnabled && audioRef.current) {
+                  audioRef.current.pause()
+                  audioRef.current.currentTime = 0
+                  setAudioUrl(null)
+                  setIsPlayingAudio(false)
+                }
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5",
+                "transition-all duration-200",
+                ttsEnabled
+                  ? "text-primary"
+                  : "text-muted-foreground",
+              )}
+            >
+              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              <span>{ttsEnabled ? "Voice on" : "Voice off"}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -795,8 +796,41 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   // Conversation view
   return (
     <div className="flex flex-col h-full min-h-[calc(100dvh-5rem)]">
+      {/* Header with voice toggle */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+        <span className="text-xs text-muted-foreground">Red Cross Doctrine Assistant</span>
+        <button
+          onClick={() => {
+            const newTtsEnabled = !ttsEnabled
+            setTtsEnabled(newTtsEnabled)
+            if (!newTtsEnabled && audioRef.current) {
+              audioRef.current.pause()
+              audioRef.current.currentTime = 0
+              setAudioUrl(null)
+              setIsPlayingAudio(false)
+            }
+          }}
+          className={cn(
+            "px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5",
+            "transition-all duration-200",
+            ttsEnabled
+              ? "bg-primary/10 text-primary"
+              : "bg-muted/50 text-muted-foreground",
+          )}
+        >
+          {isPlayingAudio ? (
+            <AudioLines className="w-3.5 h-3.5 animate-pulse" />
+          ) : ttsEnabled ? (
+            <Volume2 className="w-3.5 h-3.5" />
+          ) : (
+            <VolumeX className="w-3.5 h-3.5" />
+          )}
+          <span>{ttsEnabled ? "Voice" : "Muted"}</span>
+        </button>
+      </div>
+      
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-6 touch-scroll">
+      <div className="flex-1 overflow-y-auto px-5 py-4 touch-scroll">
         <div className="space-y-6">
           {messages.map((message) => (
             <div key={message.id}>
@@ -957,33 +991,9 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               disabled={isListening}
             />
             
-            {/* Action buttons - bottom aligned */}
-            <div className="flex items-end gap-2 pr-3 pb-3 self-end">
-              {/* TTS toggle - subtle */}
-              <button
-                onClick={() => {
-                  const newTtsEnabled = !ttsEnabled
-                  setTtsEnabled(newTtsEnabled)
-                  if (!newTtsEnabled && audioRef.current) {
-                    audioRef.current.pause()
-                    audioRef.current.currentTime = 0
-                    setAudioUrl(null)
-                    setIsPlayingAudio(false)
-                  }
-                }}
-                className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center",
-                  "transition-all duration-200",
-                  ttsEnabled
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                )}
-                title={ttsEnabled ? "Voice responses on" : "Voice responses off"}
-              >
-                {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </button>
-              
-              {/* Smart action button: Voice when empty, Send when has text, Stop when listening */}
+            {/* Smart action button - bottom aligned */}
+            <div className="flex items-end pr-3 pb-3 self-end">
+              {/* Single button: Voice when empty, Send when has text, Stop when listening */}
               <button
                 onClick={() => {
                   if (isListening) {
@@ -1001,26 +1011,26 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 }}
                 disabled={isLoading}
                 className={cn(
-                  "w-11 h-11 rounded-full flex items-center justify-center",
-                  "transition-all duration-300 ease-out",
+                  "w-9 h-9 rounded-full flex items-center justify-center",
+                  "transition-all duration-200",
                   isLoading
                     ? "bg-muted text-muted-foreground"
                     : isListening
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110"
+                      ? "bg-primary text-primary-foreground"
                       : input.trim()
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                        ? "bg-primary text-primary-foreground"
                         : "bg-muted/80 text-foreground hover:bg-muted",
                 )}
                 title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
               >
                 {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : isListening ? (
-                  <Square className="w-4 h-4 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current" />
                 ) : input.trim() ? (
-                  <ArrowUp className="w-5 h-5" />
+                  <ArrowUp className="w-4 h-4" />
                 ) : (
-                  <AudioLines className="w-5 h-5" />
+                  <AudioLines className="w-4 h-4" />
                 )}
               </button>
             </div>
@@ -1028,8 +1038,9 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           
           {/* Voice transcript - floating below input */}
           {(isListening || transcript || interimTranscript) && (
-            <div className="px-5 py-2.5 border-t border-border/50 text-sm text-primary">
-              <span className="animate-pulse">{transcript || interimTranscript || "Listening..."}</span>
+            <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
+              <AudioLines className="w-4 h-4 animate-pulse" />
+              <span>{transcript || interimTranscript || "Listening..."}</span>
             </div>
           )}
         </div>
