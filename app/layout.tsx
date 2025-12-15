@@ -32,8 +32,8 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
-    // Apple touch icon for home screen
-    apple: "/apple-icon.png",
+    // Apple touch icon for home screen (ARC branded)
+    apple: "/arc-web-clip.png",
   },
   // PWA manifest
   manifest: "/manifest.json",
