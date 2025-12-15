@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
-import { ArrowUp, Loader2, Sparkles, BookOpen, Mic, MicOff, Volume2, VolumeX } from "lucide-react"
+import { ArrowUp, Loader2, Sparkles, BookOpen, AudioLines, Square, Volume2, VolumeX } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { massCareContent } from "@/lib/mass-care-content"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
@@ -714,54 +714,42 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 disabled={isListening}
               />
               
-              {/* Action buttons - bottom aligned inside input */}
-              <div className="flex items-end gap-1 pr-3 pb-3 self-end">
-                {/* Voice input button */}
-                {isVoiceSupported && (
-                  <button
-                    onClick={() => {
-                      if (isListening) {
-                        stopListening()
-                        setIsVoiceActive(false)
-                        resetVoice()
-                      } else {
-                        setIsVoiceActive(true)
-                        startListening()
-                      }
-                    }}
-                    className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center",
-                      "transition-all duration-200",
-                      isListening
-                        ? "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                    )}
-                    title={isListening ? "Stop listening" : "Voice input"}
-                  >
-                    {isListening ? (
-                      <div className="relative">
-                        <MicOff className="w-5 h-5" />
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-ping" />
-                      </div>
-                    ) : (
-                      <Mic className="w-5 h-5" />
-                    )}
-                  </button>
-                )}
-                
-                {/* Send button - clear background with circle outline */}
+              {/* Smart action button - voice/send toggle */}
+              <div className="flex items-end pr-3 pb-3 self-end">
+                {/* Single smart button: Voice when empty, Send when has text, Stop when listening */}
                 <button
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || isListening}
+                  onClick={() => {
+                    if (isListening) {
+                      // Stop listening
+                      stopListening()
+                      setIsVoiceActive(false)
+                    } else if (input.trim()) {
+                      // Send message
+                      handleSend()
+                    } else if (isVoiceSupported) {
+                      // Start voice input
+                      setIsVoiceActive(true)
+                      startListening()
+                    }
+                  }}
                   className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center",
-                    "border-2 transition-all duration-200",
-                    input.trim() && !isListening 
-                      ? "border-primary text-primary hover:bg-primary/10" 
-                      : "border-muted-foreground/30 text-muted-foreground/50",
+                    "w-12 h-12 rounded-full flex items-center justify-center",
+                    "transition-all duration-300 ease-out",
+                    isListening
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110"
+                      : input.trim()
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                        : "bg-muted/80 text-foreground hover:bg-muted",
                   )}
+                  title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
                 >
-                  <ArrowUp className="w-5 h-5" />
+                  {isListening ? (
+                    <Square className="w-5 h-5 fill-current" />
+                  ) : input.trim() ? (
+                    <ArrowUp className="w-5 h-5" />
+                  ) : (
+                    <AudioLines className="w-5 h-5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -970,40 +958,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             />
             
             {/* Action buttons - bottom aligned */}
-            <div className="flex items-end gap-1 pr-3 pb-3 self-end">
-              {/* Voice input button */}
-              {isVoiceSupported && (
-                <button
-                  onClick={() => {
-                    if (isListening) {
-                      stopListening()
-                      setIsVoiceActive(false)
-                      resetVoice()
-                    } else {
-                      setIsVoiceActive(true)
-                      startListening()
-                    }
-                  }}
-                  className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center",
-                    "transition-all duration-200",
-                    isListening
-                      ? "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                  )}
-                  title={isListening ? "Stop listening" : "Voice input"}
-                >
-                  {isListening ? (
-                    <div className="relative">
-                      <MicOff className="w-4 h-4" />
-                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-                    </div>
-                  ) : (
-                    <Mic className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-              
+            <div className="flex items-end gap-2 pr-3 pb-3 self-end">
               {/* TTS toggle - subtle */}
               <button
                 onClick={() => {
@@ -1023,27 +978,49 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                 )}
-                title={ttsEnabled ? "Voice on" : "Voice off"}
+                title={ttsEnabled ? "Voice responses on" : "Voice responses off"}
               >
                 {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
               
-              {/* Send button - clear background with circle outline */}
+              {/* Smart action button: Voice when empty, Send when has text, Stop when listening */}
               <button
-                onClick={() => handleSend()}
-                disabled={!input.trim() || isLoading || isListening}
+                onClick={() => {
+                  if (isListening) {
+                    // Stop listening
+                    stopListening()
+                    setIsVoiceActive(false)
+                  } else if (input.trim()) {
+                    // Send message
+                    handleSend()
+                  } else if (isVoiceSupported) {
+                    // Start voice input
+                    setIsVoiceActive(true)
+                    startListening()
+                  }
+                }}
+                disabled={isLoading}
                 className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center",
-                  "border-2 transition-all duration-200",
-                  input.trim() && !isLoading && !isListening 
-                    ? "border-primary text-primary hover:bg-primary/10" 
-                    : "border-muted-foreground/30 text-muted-foreground/50",
+                  "w-11 h-11 rounded-full flex items-center justify-center",
+                  "transition-all duration-300 ease-out",
+                  isLoading
+                    ? "bg-muted text-muted-foreground"
+                    : isListening
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110"
+                      : input.trim()
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                        : "bg-muted/80 text-foreground hover:bg-muted",
                 )}
+                title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
               >
                 {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : isListening ? (
+                  <Square className="w-4 h-4 fill-current" />
+                ) : input.trim() ? (
+                  <ArrowUp className="w-5 h-5" />
                 ) : (
-                  <ArrowUp className="w-4 h-4" />
+                  <AudioLines className="w-5 h-5" />
                 )}
               </button>
             </div>
