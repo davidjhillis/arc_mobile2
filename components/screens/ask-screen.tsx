@@ -677,7 +677,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             )}
           >
             {/* Textarea container */}
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -714,8 +714,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 disabled={isListening}
               />
               
-              {/* Action buttons - inside the input */}
-              <div className="flex items-center gap-1 pr-3 pb-3">
+              {/* Action buttons - bottom aligned inside input */}
+              <div className="flex items-end gap-1 pr-3 pb-3 self-end">
                 {/* Voice input button */}
                 {isVoiceSupported && (
                   <button
@@ -749,16 +749,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                   </button>
                 )}
                 
-                {/* Send button - appears when there's input */}
+                {/* Send button - clear background with circle outline */}
                 <button
                   onClick={() => handleSend()}
                   disabled={!input.trim() || isListening}
                   className={cn(
                     "w-10 h-10 rounded-full flex items-center justify-center",
-                    "transition-all duration-300 ease-out",
+                    "border-2 transition-all duration-200",
                     input.trim() && !isListening 
-                      ? "bg-primary text-primary-foreground scale-100 opacity-100 shadow-lg shadow-primary/30" 
-                      : "bg-transparent text-muted-foreground scale-90 opacity-50",
+                      ? "border-primary text-primary hover:bg-primary/10" 
+                      : "border-muted-foreground/30 text-muted-foreground/50",
                   )}
                 >
                   <ArrowUp className="w-5 h-5" />
@@ -969,8 +969,8 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
               disabled={isListening}
             />
             
-            {/* Action buttons - inside the input */}
-            <div className="flex items-center gap-1 pr-2 pb-2">
+            {/* Action buttons - bottom aligned */}
+            <div className="flex items-end gap-1 pr-3 pb-3 self-end">
               {/* Voice input button */}
               {isVoiceSupported && (
                 <button
@@ -1028,16 +1028,16 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
               
-              {/* Send button */}
+              {/* Send button - clear background with circle outline */}
               <button
                 onClick={() => handleSend()}
                 disabled={!input.trim() || isLoading || isListening}
                 className={cn(
                   "w-9 h-9 rounded-full flex items-center justify-center",
-                  "transition-all duration-300 ease-out",
+                  "border-2 transition-all duration-200",
                   input.trim() && !isLoading && !isListening 
-                    ? "bg-primary text-primary-foreground scale-100 opacity-100 shadow-md shadow-primary/30" 
-                    : "bg-transparent text-muted-foreground scale-90 opacity-40",
+                    ? "border-primary text-primary hover:bg-primary/10" 
+                    : "border-muted-foreground/30 text-muted-foreground/50",
                 )}
               >
                 {isLoading ? (
