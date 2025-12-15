@@ -144,8 +144,36 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       return
     }
 
+    // Reset state before starting
+    setState((prev) => ({
+      ...prev,
+      transcript: "",
+      interimTranscript: "",
+      error: null,
+    }))
+
     try {
-      recognitionRef.current.start()
+      // Try to stop any existing session first
+      try {
+        recognitionRef.current.abort()
+      } catch (e) {
+        // Ignore abort errors
+      }
+      
+      // Small delay to ensure clean start
+      setTimeout(() => {
+        try {
+          recognitionRef.current?.start()
+          console.log("[SpeechRecognition] Starting...")
+        } catch (error) {
+          console.error("[SpeechRecognition] Start error:", error)
+          const err = error instanceof Error ? error : new Error(String(error))
+          setState((prev) => ({ ...prev, error: err, isListening: false }))
+          if (onError) {
+            onError(err)
+          }
+        }
+      }, 100)
     } catch (error) {
       // Already started or other error
       const err = error instanceof Error ? error : new Error(String(error))
@@ -157,10 +185,17 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   }, [onError])
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current && state.isListening) {
-      recognitionRef.current.stop()
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+        console.log("[SpeechRecognition] Stopping...")
+      } catch (e) {
+        // Ignore stop errors
+        console.warn("[SpeechRecognition] Stop error:", e)
+      }
+      setState((prev) => ({ ...prev, isListening: false }))
     }
-  }, [state.isListening])
+  }, [])
 
   const reset = useCallback(() => {
     setState({
