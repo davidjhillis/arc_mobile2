@@ -3,78 +3,147 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light theme with Red Cross brand red accent - clean, airy feel */
+/*
+  American Red Cross design tokens
+  ---------------------------------
+  Sources: ARC Brand Standards (PMS 485 / #ED1B2E primary), extended palette per
+  ARC Brand Book (Nevada gray, Iron, Pacific Blue, Regal Blue, Tulip Tree, Fern Green).
+
+  Color usage rules:
+  - --primary (Crimson #ED1B2E) is reserved: logo lockup, ONE primary CTA per
+    screen, critical/destructive states. Never use it for passive UI (links,
+    selected nav, focus rings, decorative chrome).
+  - --interactive (Pacific Blue) is the workhorse for links, focus rings,
+    selected state, voice-listening indicator — anywhere "active but not urgent".
+  - --interactive-deep (Regal Blue) is hover/pressed for --interactive, and a
+    strong text accent on light backgrounds.
+  - --success (Fern Green) and --warning (Tulip Tree) are status only.
+*/
+
 :root {
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.15 0.01 260);
+  /* Surfaces — neutral, airy, calm */
+  --background: oklch(0.985 0 0);          /* near-white */
+  --foreground: oklch(0.18 0 0);           /* near-black, slightly warm */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.01 260);
+  --card-foreground: oklch(0.18 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.01 260);
-  /* Red Cross brand red (#ED1B2E) */
-  --primary: oklch(0.55 0.24 25);
+  --popover-foreground: oklch(0.18 0 0);
+
+  /* ARC Crimson #ED1B2E — PMS 485 C — primary brand */
+  --primary: oklch(0.582 0.225 27.5);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.005 260);
-  --secondary-foreground: oklch(0.25 0.01 260);
-  --muted: oklch(0.94 0.005 260);
-  --muted-foreground: oklch(0.45 0.01 260);
-  --accent: oklch(0.96 0.005 260);
-  --accent-foreground: oklch(0.2 0.01 260);
-  --destructive: oklch(0.55 0.24 25);
+  --primary-deep: oklch(0.398 0.165 24);   /* Falu Red #7F181B — hover/pressed */
+
+  /* Pacific Blue #0091CD — interactive workhorse */
+  --interactive: oklch(0.626 0.143 235);
+  --interactive-foreground: oklch(1 0 0);
+  --interactive-deep: oklch(0.371 0.099 240); /* Regal Blue #004B79 */
+  --interactive-soft: oklch(0.92 0.04 235);   /* Tropical Blue #C4DFF6 — backgrounds */
+
+  /* ARC neutrals — Nevada / Iron */
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.30 0 0);
+  --muted: oklch(0.95 0 0);                /* Iron-tinted surface */
+  --muted-foreground: oklch(0.46 0 0);     /* Nevada #6D6E70 — body muted */
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.22 0 0);
+
+  /* Status — Fern Green / Tulip Tree */
+  --success: oklch(0.55 0.13 138);         /* Fern Green #537B35 */
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.78 0.155 80);         /* Tulip Tree #ECB731 */
+  --warning-foreground: oklch(0.18 0 0);
+
+  /* Destructive shares Crimson — they are the same in ARC's system */
+  --destructive: oklch(0.582 0.225 27.5);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9 0.005 260);
-  --input: oklch(0.94 0.005 260);
-  --ring: oklch(0.55 0.24 25);
-  --chart-1: oklch(0.55 0.24 25);
-  --chart-2: oklch(0.55 0.15 220);
-  --chart-3: oklch(0.6 0.12 150);
-  --chart-4: oklch(0.65 0.15 60);
-  --chart-5: oklch(0.5 0.18 280);
-  --radius: 1rem;
+
+  /* Lines & inputs — Iron #D7D7D8 */
+  --border: oklch(0.87 0 0);
+  --input: oklch(0.94 0 0);
+  --ring: oklch(0.626 0.143 235);          /* focus ring uses interactive blue */
+
+  /* Charts — distinct, accessible */
+  --chart-1: oklch(0.582 0.225 27.5);      /* Crimson */
+  --chart-2: oklch(0.626 0.143 235);       /* Pacific Blue */
+  --chart-3: oklch(0.55 0.13 138);         /* Fern Green */
+  --chart-4: oklch(0.78 0.155 80);         /* Tulip Tree */
+  --chart-5: oklch(0.371 0.099 240);       /* Regal Blue */
+
+  --radius: 0.875rem;                      /* 14px — slightly tighter than 16 */
+
   --sidebar: oklch(0.98 0 0);
-  --sidebar-foreground: oklch(0.15 0.01 260);
-  --sidebar-primary: oklch(0.55 0.24 25);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.582 0.225 27.5);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.96 0.005 260);
-  --sidebar-accent-foreground: oklch(0.2 0.01 260);
-  --sidebar-border: oklch(0.9 0.005 260);
-  --sidebar-ring: oklch(0.55 0.24 25);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.22 0 0);
+  --sidebar-border: oklch(0.87 0 0);
+  --sidebar-ring: oklch(0.626 0.143 235);
+
+  /* Elevation — light, layered, no heavy drop shadows */
+  --shadow-resting: 0 1px 2px oklch(0 0 0 / 0.04), 0 0 0 1px oklch(0 0 0 / 0.04);
+  --shadow-raised: 0 4px 12px oklch(0 0 0 / 0.06), 0 0 0 1px oklch(0 0 0 / 0.04);
+  --shadow-floating: 0 16px 32px oklch(0 0 0 / 0.10), 0 0 0 1px oklch(0 0 0 / 0.04);
 }
 
-/* Dark mode preserved for toggle capability */
+/* Dark mode — adjusted for ARC palette, preserving brand */
 .dark {
-  --background: oklch(0.11 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.15 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.13 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.57 0.22 25);
+  --background: oklch(0.14 0.005 260);
+  --foreground: oklch(0.96 0 0);
+  --card: oklch(0.17 0.005 260);
+  --card-foreground: oklch(0.96 0 0);
+  --popover: oklch(0.15 0.005 260);
+  --popover-foreground: oklch(0.96 0 0);
+
+  --primary: oklch(0.62 0.22 27.5);        /* slightly lifted Crimson */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.18 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.55 0 0);
-  --accent: oklch(0.2 0.01 260);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.6 0.2 25);
+  --primary-deep: oklch(0.45 0.18 24);
+
+  --interactive: oklch(0.70 0.135 235);    /* lifted Pacific Blue */
+  --interactive-foreground: oklch(0.10 0 0);
+  --interactive-deep: oklch(0.50 0.10 240);
+  --interactive-soft: oklch(0.28 0.05 235);
+
+  --secondary: oklch(0.21 0.005 260);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.23 0.005 260);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.22 0.005 260);
+  --accent-foreground: oklch(0.96 0 0);
+
+  --success: oklch(0.65 0.13 138);
+  --success-foreground: oklch(0.10 0 0);
+  --warning: oklch(0.82 0.155 80);
+  --warning-foreground: oklch(0.10 0 0);
+
+  --destructive: oklch(0.62 0.22 27.5);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.22 0.01 260);
-  --input: oklch(0.18 0.01 260);
-  --ring: oklch(0.57 0.22 25);
-  --sidebar: oklch(0.13 0.01 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.57 0.22 25);
+
+  --border: oklch(0.26 0.005 260);
+  --input: oklch(0.21 0.005 260);
+  --ring: oklch(0.70 0.135 235);
+
+  --sidebar: oklch(0.15 0.005 260);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-primary: oklch(0.62 0.22 27.5);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.18 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.22 0.01 260);
-  --sidebar-ring: oklch(0.57 0.22 25);
+  --sidebar-accent: oklch(0.21 0.005 260);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(0.26 0.005 260);
+  --sidebar-ring: oklch(0.70 0.135 235);
+
+  --shadow-resting: 0 1px 2px oklch(0 0 0 / 0.4), 0 0 0 1px oklch(1 0 0 / 0.04);
+  --shadow-raised: 0 4px 12px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(1 0 0 / 0.04);
+  --shadow-floating: 0 16px 32px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
 }
 
 @theme inline {
+  /* Inter is the open-source Akzidenz-Grotesk substitute approved for ARC digital */
   --font-sans: "Inter", "Inter Fallback", system-ui, sans-serif;
+  --font-serif: "Georgia", "Times New Roman", serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback";
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -83,12 +152,21 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-deep: var(--primary-deep);
+  --color-interactive: var(--interactive);
+  --color-interactive-foreground: var(--interactive-foreground);
+  --color-interactive-deep: var(--interactive-deep);
+  --color-interactive-soft: var(--interactive-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -99,10 +177,11 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: calc(var(--radius) - 6px);  /* 8px */
+  --radius-md: calc(var(--radius) - 2px);  /* 12px */
+  --radius-lg: var(--radius);              /* 14px */
+  --radius-xl: calc(var(--radius) + 6px);  /* 20px */
+  --radius-2xl: calc(var(--radius) + 14px);/* 28px — sheets, hero cards */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -119,24 +198,55 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";  /* Inter humanist alternates */
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Respect user motion preferences — required for ARC accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Larger, more visible focus ring — uses Pacific Blue, not Crimson */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 }
 
-/* Smooth scrolling */
+/* Smooth iOS momentum scrolling */
 .touch-scroll {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
 
-/* Minimal scrollbar */
+/* Hide scrollbars on mobile chrome */
 ::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
 
-/* Glass effect updated for light theme */
+/* Frosted-glass surface — used for floating chrome (nav, voice sheet) */
 .glass {
-  background: oklch(1 0 0 / 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: oklch(1 0 0 / 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid oklch(1 0 0 / 0.6);
 }
+.dark .glass {
+  background: oklch(0.15 0.005 260 / 0.72);
+  border: 1px solid oklch(1 0 0 / 0.06);
+}
+
+/* Elevation utilities — use sparingly */
+.elevation-resting { box-shadow: var(--shadow-resting); }
+.elevation-raised { box-shadow: var(--shadow-raised); }
+.elevation-floating { box-shadow: var(--shadow-floating); }
