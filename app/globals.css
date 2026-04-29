@@ -333,12 +333,12 @@
     position: relative;
     /* Scale the whole bezel down proportionally if the window can't fit
        the device's natural height. Stays at 1 (true size) on tall windows. */
-    transform: scale(min(1, calc((100vh - 7rem) / (var(--device-h, 874px) + 28px))));
+    transform: scale(min(1, calc((100vh - 7rem) / (var(--device-h, 852px) + 28px))));
     transform-origin: top center;
   }
   .device-screen {
-    width: var(--device-w, 402px);
-    height: var(--device-h, 874px);
+    width: var(--device-w, 393px);
+    height: var(--device-h, 852px);
   }
   /* Make the AppShell honour the fixed phone height instead of the window */
   .device-screen .min-h-dvh,

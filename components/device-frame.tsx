@@ -36,10 +36,11 @@ interface DeviceFrameProps {
 
 export function DeviceFrame({
   children,
-  // iPhone 17 Pro logical resolution (CSS px).
-  width = 402,
-  height = 874,
-  label = "iPhone 17 Pro · 402 × 874",
+  // iPhone 17 logical resolution (CSS px) — same width across the 12–17 base
+  // line, so designs that work here work everywhere.
+  width = 393,
+  height = 852,
+  label = "iPhone 17 · 393 × 852",
 }: DeviceFrameProps) {
   return (
     <div className="device-stage md:min-h-screen md:flex md:items-center md:justify-center md:bg-zinc-100 md:dark:bg-zinc-900 md:p-6 md:gap-6">

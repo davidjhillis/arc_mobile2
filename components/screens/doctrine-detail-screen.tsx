@@ -1062,6 +1062,87 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
   }
 
+  // Tiny markdown-to-react renderer for AI-generated copy.
+  // Supports paragraphs, **bold**, *italic*, `code`, bullet lists, and headings (## / ###).
+  const renderInlineSpans = (text: string, keyBase: string): React.ReactNode[] => {
+    const out: React.ReactNode[] = []
+    const re = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|(`[^`]+`)/g
+    let last = 0
+    let m: RegExpExecArray | null
+    let i = 0
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index))
+      const tok = m[0]
+      if (tok.startsWith("**")) {
+        out.push(
+          <strong key={`${keyBase}-b-${i++}`} className="font-semibold">
+            {tok.slice(2, -2)}
+          </strong>
+        )
+      } else if (tok.startsWith("`")) {
+        out.push(
+          <code key={`${keyBase}-c-${i++}`} className="font-mono text-[0.92em] bg-card/70 px-1 py-0.5 rounded">
+            {tok.slice(1, -1)}
+          </code>
+        )
+      } else {
+        out.push(
+          <em key={`${keyBase}-i-${i++}`}>{tok.slice(1, -1)}</em>
+        )
+      }
+      last = m.index + tok.length
+    }
+    if (last < text.length) out.push(text.slice(last))
+    return out
+  }
+
+  const AIMarkdown = ({ text }: { text: string }) => {
+    const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/)
+    return (
+      <div className="space-y-3 text-[15px] leading-relaxed text-foreground">
+        {blocks.map((block, bi) => {
+          const lines = block.split("\n").filter((l) => l.length > 0)
+          if (lines.length === 0) return null
+          // Heading (## / ###)
+          if (/^#{2,3}\s+/.test(lines[0]) && lines.length === 1) {
+            const level = lines[0].startsWith("###") ? 3 : 2
+            const text = lines[0].replace(/^#{2,3}\s+/, "")
+            return level === 2 ? (
+              <h4 key={bi} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-1">
+                {text}
+              </h4>
+            ) : (
+              <h5 key={bi} className="text-sm font-semibold text-foreground">
+                {text}
+              </h5>
+            )
+          }
+          // List
+          if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
+            return (
+              <ul key={bi} className="list-disc pl-5 space-y-1.5">
+                {lines.map((l, li) => (
+                  <li key={li}>{renderInlineSpans(l.replace(/^\s*[-*]\s+/, ""), `${bi}-${li}`)}</li>
+                ))}
+              </ul>
+            )
+          }
+          // Paragraph
+          return (
+            <p key={bi}>
+              {lines.map((l, li) => (
+                <span key={li}>
+                  {renderInlineSpans(l, `${bi}-${li}`)}
+                  {li < lines.length - 1 && <br />}
+                </span>
+              ))}
+            </p>
+          )
+        })}
+      </div>
+    )
+  }
+
   // Build the canonical share URL (used by every share option)
   const buildShareUrl = () =>
     typeof window !== "undefined"
@@ -1668,53 +1749,89 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
               {/* Summary panel */}
               {showSummary && (
-                <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 p-5">
-                  {!aiSummary && !summaryGenerated ? (
-                    <div className="flex items-center gap-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
-                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
-                      </div>
-                      <span className="text-sm text-muted-foreground">Generating summary…</span>
+                <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 overflow-hidden">
+                  {/* Sticky panel header with close */}
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-interactive/15 bg-interactive-soft/30">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-interactive" aria-hidden />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-interactive-deep">
+                        AI Summary
+                      </span>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {aiSummary && <p className="text-[15px] leading-relaxed text-foreground">{aiSummary}</p>}
-                      {aiKeyPoints.length > 0 && (
-                        <>
-                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-2">
-                            Key points
-                          </h4>
-                          <ul className="space-y-1.5 list-disc pl-5 text-[15px] text-foreground">
-                            {aiKeyPoints.map((point, idx) => (
-                              <li key={idx}>{point}</li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-interactive/15">
-                        <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-                          <Info className="w-3.5 h-3.5" aria-hidden />
-                          AI summary — verify against doctrine
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <button aria-label="Helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-success transition">
-                            <ThumbsUp className="w-4 h-4" />
-                          </button>
-                          <button aria-label="Not helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-primary transition">
-                            <ThumbsDown className="w-4 h-4" />
-                          </button>
+                    <button
+                      onClick={() => setShowSummary(false)}
+                      aria-label="Close summary"
+                      className="w-8 h-8 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground active:scale-95 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-5">
+                    {!aiSummary && !summaryGenerated ? (
+                      <div className="flex items-center gap-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                        </div>
+                        <span className="text-sm text-muted-foreground">Generating summary…</span>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* Render the full AI output as markdown — captures bold, lists,
+                            headings, and inline emphasis without leaking literal asterisks. */}
+                        {aiSummary && <AIMarkdown text={aiSummary} />}
+                        {aiKeyPoints.length > 0 && !aiSummary.includes("Key Points") && !aiSummary.includes("**") && (
+                          <>
+                            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-3 mb-1.5">
+                              Key points
+                            </h4>
+                            <ul className="space-y-1.5 list-disc pl-5 text-[15px] text-foreground">
+                              {aiKeyPoints.map((point, idx) => (
+                                <li key={idx}>{point}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-interactive/15">
+                          <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5" aria-hidden />
+                            Verify against doctrine
+                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <button aria-label="Helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-success transition">
+                              <ThumbsUp className="w-4 h-4" />
+                            </button>
+                            <button aria-label="Not helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-primary transition">
+                              <ThumbsDown className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Ask AI panel */}
               {showAskAI && (
-                <div className="rounded-2xl bg-card border border-border p-5">
+                <div className="rounded-2xl bg-card border border-border overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-interactive" aria-hidden />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                        Ask about this article
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowAskAI(false)}
+                      aria-label="Close ask"
+                      className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground active:scale-95 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-5">
                   <div className="flex gap-2 mb-3">
                     <input
                       type="text"
@@ -1768,13 +1885,12 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                     ) : askAIAnswer ? (
                       <div className="space-y-2">
                         <p className="text-xs text-muted-foreground">{askAIQuestion}</p>
-                        <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">
-                          {askAIAnswer}
-                        </p>
+                        <AIMarkdown text={askAIAnswer} />
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">Tap a quick question or type your own.</p>
                     )}
+                  </div>
                   </div>
                 </div>
               )}
