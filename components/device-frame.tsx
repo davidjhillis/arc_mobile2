@@ -25,7 +25,7 @@ import type { ReactNode } from "react"
 
 interface DeviceFrameProps {
   children: ReactNode
-  /** Override the screen size. Defaults to iPhone 16 / 17 dimensions in CSS px. */
+  /** Override the screen size. Defaults to iPhone 17 Pro logical dimensions. */
   width?: number
   height?: number
   /** Optional caption shown beside the device on desktop (design-review label). */
@@ -34,9 +34,10 @@ interface DeviceFrameProps {
 
 export function DeviceFrame({
   children,
-  width = 393,
-  height = 852,
-  label = "iPhone · 393 × 852",
+  // iPhone 17 Pro logical resolution (CSS px).
+  width = 402,
+  height = 874,
+  label = "iPhone 17 Pro · 402 × 874",
 }: DeviceFrameProps) {
   return (
     <div className="device-stage md:min-h-screen md:flex md:items-center md:justify-center md:bg-zinc-100 md:dark:bg-zinc-900 md:p-6 md:gap-6">
