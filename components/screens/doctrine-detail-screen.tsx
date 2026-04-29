@@ -36,6 +36,9 @@ import { massCareContent } from "@/lib/mass-care-content"
 
 interface DoctrineDetailScreenProps {
   doctrineId: string | null
+  /** Screen to return to when the user taps Back. Captured by AppShell from
+   *  the screen the user was on when they opened this article. */
+  returnTo?: Screen
   onNavigate: (screen: Screen, disasterType?: string, doctrineId?: string, group?: string) => void
 }
 
@@ -861,7 +864,7 @@ interface TocItem {
   level: number
 }
 
-export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailScreenProps) {
+export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctrine" }: DoctrineDetailScreenProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [headerCondensed, setHeaderCondensed] = useState(false)
@@ -1439,7 +1442,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
       >
         <div className="flex items-center gap-1 px-2 pt-12 pb-2">
           <button
-            onClick={() => onNavigate("doctrine")}
+            onClick={() => onNavigate(returnTo)}
             aria-label="Back"
             className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted shrink-0"
           >

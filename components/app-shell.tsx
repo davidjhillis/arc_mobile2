@@ -33,6 +33,10 @@ export function AppShell() {
   const [selectedDoctrineId, setSelectedDoctrineId] = useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  // Track where the user came from when they opened an article so the
+  // detail screen's back button returns to that origin (home, feed, ask,
+  // doctrine list, etc.) rather than always defaulting to the assignment list.
+  const [detailReturnTo, setDetailReturnTo] = useState<Screen>("home")
   const askScreenRef = useRef<AskScreenRef | null>(null)
 
   const handleNavigate = (screen: Screen, disasterType?: string, doctrineId?: string, group?: string) => {
@@ -44,6 +48,12 @@ export function AppShell() {
     }
     if (group) {
       setSelectedGroup(group)
+    }
+    // Capture the source screen ONCE when navigating into the article
+    // detail. Detail→detail jumps (related-doc clicks) preserve the original
+    // origin so back still returns to where the user actually came from.
+    if (screen === "doctrine-detail" && activeScreen !== "doctrine-detail") {
+      setDetailReturnTo(activeScreen)
     }
     setActiveScreen(screen)
   }
@@ -72,7 +82,13 @@ export function AppShell() {
           />
         )
       case "doctrine-detail":
-        return <DoctrineDetailScreen doctrineId={selectedDoctrineId} onNavigate={handleNavigate} />
+        return (
+          <DoctrineDetailScreen
+            doctrineId={selectedDoctrineId}
+            onNavigate={handleNavigate}
+            returnTo={detailReturnTo}
+          />
+        )
       case "services":
         return <ServicesScreen onNavigate={handleNavigate} />
       case "ask":
