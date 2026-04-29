@@ -9,7 +9,6 @@ import {
   Bookmark,
   ChevronRight,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Flame,
   RefreshCw,
@@ -170,28 +169,15 @@ function bucketOf(ts: number, now: number): Bucket {
 
 type FilterChip =
   | { id: "all"; label: "All" }
-  | { id: "new"; label: "New & Updated" }
+  | { id: "new"; label: "New" }
   | { id: "yours"; label: "Your roles" }
   | { id: "trending"; label: "Trending" }
-  | { id: "type"; label: "Task Sheets"; type: DoctrineContent["type"] }
-  | { id: "type"; label: "Standards"; type: DoctrineContent["type"] }
-  | { id: "type"; label: "Overviews"; type: DoctrineContent["type"] }
-  | { id: "type"; label: "Roles"; type: DoctrineContent["type"] }
 
-// Always-visible top filters (the semantic ones).
 const TOP_CHIPS: FilterChip[] = [
   { id: "all", label: "All" },
-  { id: "new", label: "New & Updated" },
+  { id: "new", label: "New" },
   { id: "trending", label: "Trending" },
   { id: "yours", label: "Your roles" },
-]
-
-// Behind the "More" disclosure — narrower-use type filters.
-const MORE_CHIPS: FilterChip[] = [
-  { id: "type", label: "Task Sheets", type: "task-sheet" },
-  { id: "type", label: "Standards", type: "standard" },
-  { id: "type", label: "Overviews", type: "overview" },
-  { id: "type", label: "Roles", type: "role" },
 ]
 
 // A doc qualifies as "trending" if its synthetic read count is in the top
@@ -199,14 +185,12 @@ const MORE_CHIPS: FilterChip[] = [
 const TRENDING_TOP_N = 8
 
 type ActiveChip = FilterChip
-const ALL_CHIPS: FilterChip[] = [...TOP_CHIPS, ...MORE_CHIPS]
 
 export function FeedScreen({ onNavigate }: FeedScreenProps) {
   const initialFeed = useMemo(() => buildFeed(), [])
   const [feed, setFeed] = useState<FeedItem[]>(initialFeed)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeChip, setActiveChip] = useState<ActiveChip>(TOP_CHIPS[0])
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   // Persisted local state (downloads, saves, read history, user profile)
   const [downloadStates, setDownloadStates] = useState<Record<string, DownloadState>>({})
@@ -371,7 +355,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
       if (activeChip.id === "new" && item.change === "unchanged") return false
       if (activeChip.id === "trending" && !trendingIds.has(item.id)) return false
       if (activeChip.id === "yours" && !matchesUserRoles(item)) return false
-      if (activeChip.id === "type" && "type" in activeChip && item.type !== activeChip.type) return false
       // Search
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
@@ -679,57 +662,28 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             )}
           </div>
 
-          {/* Filter chips — single clean row. Type filters live in a bottom
-              sheet behind a filter icon at the right. */}
-          {(() => {
-            const isActive = (c: FilterChip) =>
-              c.id === "type" && "type" in c && activeChip.id === "type" && "type" in activeChip
-                ? c.type === activeChip.type
-                : c.id === activeChip.id
-            const hiddenActive =
-              activeChip.id === "type" && MORE_CHIPS.some((c) => isActive(c))
-            return (
-              <div className="flex items-center gap-1.5 pb-2" role="tablist" aria-label="Feed filters">
-                <div className="flex-1 flex flex-wrap gap-1.5">
-                  {TOP_CHIPS.map((c, i) => (
-                    <button
-                      key={`top-${i}`}
-                      role="tab"
-                      aria-selected={isActive(c)}
-                      onClick={() => setActiveChip(c)}
-                      className={cn(
-                        "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
-                        isActive(c)
-                          ? "bg-foreground text-background"
-                          : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
+          {/* Filter chips — one clean row, four chips */}
+          <div className="flex items-center gap-1.5 pb-2" role="tablist" aria-label="Feed filters">
+            {TOP_CHIPS.map((c) => {
+              const active = c.id === activeChip.id
+              return (
                 <button
-                  type="button"
-                  onClick={() => setFilterSheetOpen(true)}
-                  aria-label="More filters"
+                  key={c.id}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveChip(c)}
                   className={cn(
-                    "shrink-0 relative w-8 h-8 rounded-full flex items-center justify-center transition",
-                    hiddenActive
+                    "flex-1 h-8 px-2 rounded-full text-[13px] font-medium transition",
+                    active
                       ? "bg-foreground text-background"
                       : "bg-muted text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <SlidersHorizontal className="w-4 h-4" />
-                  {hiddenActive && (
-                    <span
-                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-interactive ring-2 ring-background"
-                      aria-label="Filter active"
-                    />
-                  )}
+                  {c.label}
                 </button>
-              </div>
-            )
-          })()}
+              )
+            })}
+          </div>
         </div>
       </header>
 
@@ -816,74 +770,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
         </p>
       </div>
 
-      {/* Filter bottom sheet — type filters + reset */}
-      {filterSheetOpen && (
-        <>
-          <button
-            type="button"
-            aria-hidden
-            onClick={() => setFilterSheetOpen(false)}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Filters"
-            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl"
-          >
-            <div className="pt-2 pb-2">
-              <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
-              <div className="flex items-center justify-between px-5 mb-1">
-                <h2 className="text-base font-semibold text-foreground">Filter by type</h2>
-                <button
-                  onClick={() => setFilterSheetOpen(false)}
-                  aria-label="Close"
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-muted active:scale-95 transition text-foreground text-xs font-semibold"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Done
-                </button>
-              </div>
-            </div>
-
-            <div className="px-3 pb-3">
-              {MORE_CHIPS.map((c, i) => {
-                const active =
-                  activeChip.id === "type" && "type" in activeChip && "type" in c && c.type === activeChip.type
-                return (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setActiveChip(c)
-                      setFilterSheetOpen(false)
-                    }}
-                    className="w-full flex items-center justify-between gap-3 px-4 min-h-[52px] rounded-xl hover:bg-muted/40 active:scale-[0.99] transition"
-                  >
-                    <span className={cn("text-[15px]", active ? "font-semibold text-foreground" : "text-foreground")}>
-                      {c.label}
-                    </span>
-                    {active && <Check className="w-4 h-4 text-interactive" aria-hidden />}
-                  </button>
-                )
-              })}
-              {activeChip.id === "type" && (
-                <div className="px-1 pt-2">
-                  <button
-                    onClick={() => {
-                      setActiveChip(TOP_CHIPS[0])
-                      setFilterSheetOpen(false)
-                    }}
-                    className="w-full h-11 rounded-xl bg-muted text-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
-                  >
-                    Clear filter
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="h-6" />
-          </div>
-        </>
-      )}
     </div>
   )
 }
