@@ -405,10 +405,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(({ initialMess
   // ---------------- Search execution ----------------
 
   const persistRecent = (q: string) => {
-    const next = [q, ...recentSearches.filter((s) => s !== q)].slice(0, 5)
+    const next = [q, ...recentSearches.filter((s) => s !== q)].slice(0, 3)
     setRecentSearches(next)
     try {
       localStorage.setItem("arc_recent_searches", JSON.stringify(next))
+    } catch {}
+  }
+
+  const clearRecent = () => {
+    setRecentSearches([])
+    try {
+      localStorage.removeItem("arc_recent_searches")
     } catch {}
   }
 
@@ -779,9 +786,17 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(({ initialMess
           <div className="space-y-6">
             {recentSearches.length > 0 && (
               <section aria-labelledby="recent-heading">
-                <h2 id="recent-heading" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Recent
-                </h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 id="recent-heading" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Recent
+                  </h2>
+                  <button
+                    onClick={clearRecent}
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground active:scale-95 transition"
+                  >
+                    Clear
+                  </button>
+                </div>
                 <div className="bg-card rounded-2xl border border-border divide-y divide-border overflow-hidden">
                   {recentSearches.map((q) => (
                     <button

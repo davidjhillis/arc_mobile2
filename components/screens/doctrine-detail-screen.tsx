@@ -1682,16 +1682,17 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             aria-label="AI assistance"
             className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85%] overflow-y-auto flex flex-col"
           >
-            <div className="sticky top-0 bg-card pt-2 pb-3 border-b border-border">
+            <div className="sticky top-0 z-20 bg-card pt-2 pb-3 border-b border-border shadow-sm">
               <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
               <div className="flex items-center justify-between px-5">
                 <h2 className="text-base font-semibold text-foreground">AI assistance</h2>
                 <button
                   onClick={() => setAiSheetOpen(false)}
-                  aria-label="Close"
-                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted active:scale-95 transition"
+                  aria-label="Close AI sheet"
+                  className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-foreground text-background text-xs font-semibold active:scale-95 transition"
                 >
-                  <X className="w-4 h-4 text-muted-foreground" />
+                  <X className="w-3.5 h-3.5" />
+                  Close
                 </button>
               </div>
             </div>
@@ -1741,23 +1742,13 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               {/* Summary panel */}
               {showSummary && (
                 <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 overflow-hidden">
-                  {/* Panel header — sticky inside the sheet's scroll so the close
-                      X stays reachable no matter how long the summary runs.
-                      Offset (top-[3.25rem]) clears the sheet's own sticky header. */}
-                  <div className="sticky top-[3.25rem] z-10 flex items-center justify-between px-4 py-2.5 border-b border-interactive/15 bg-interactive-soft/95 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-interactive" aria-hidden />
-                      <span className="text-xs font-semibold uppercase tracking-wide text-interactive-deep">
-                        AI Summary
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setShowSummary(false)}
-                      aria-label="Close summary"
-                      className="w-9 h-9 rounded-full bg-card/80 hover:bg-card flex items-center justify-center text-foreground active:scale-95 transition shadow-sm"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                  {/* Plain (non-sticky) panel label. Sheet's own close at top
+                      handles dismissal; tapping Summarize again toggles this off. */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-interactive/15">
+                    <Sparkles className="w-4 h-4 text-interactive" aria-hidden />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-interactive-deep">
+                      AI Summary
+                    </span>
                   </div>
                   <div className="p-5">
                     {!aiSummary && !summaryGenerated ? (
@@ -1809,20 +1800,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               {/* Ask AI panel */}
               {showAskAI && (
                 <div className="rounded-2xl bg-card border border-border overflow-hidden">
-                  <div className="sticky top-[3.25rem] z-10 flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/95 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-interactive" aria-hidden />
-                      <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
-                        Ask about this article
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setShowAskAI(false)}
-                      aria-label="Close ask"
-                      className="w-9 h-9 rounded-full bg-muted/80 hover:bg-muted flex items-center justify-center text-foreground active:scale-95 transition"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+                    <MessageSquare className="w-4 h-4 text-interactive" aria-hidden />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                      Ask about this article
+                    </span>
                   </div>
                   <div className="p-5">
                   <div className="flex gap-2 mb-3">
