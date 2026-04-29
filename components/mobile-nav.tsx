@@ -21,7 +21,7 @@ export function MobileNav({ activeScreen, onNavigate }: MobileNavProps) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-background/95 backdrop-blur-md border-t border-border"
+      className="fixed bottom-0 left-0 right-0 z-30 max-w-lg mx-auto bg-background/95 backdrop-blur-md border-t border-border"
     >
       <ul className="flex items-stretch justify-around pt-2 pb-7">
         {navItems.map((item) => {
