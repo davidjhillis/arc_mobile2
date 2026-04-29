@@ -185,8 +185,7 @@ type FilterChip =
   | { id: "all"; label: "All" }
   | { id: "new"; label: "New & Updated" }
   | { id: "yours"; label: "Your roles" }
-  | { id: "saved"; label: "Saved" }
-  | { id: "downloaded"; label: "Offline" }
+  | { id: "trending"; label: "Trending" }
   | { id: "type"; label: "Task Sheets"; type: DoctrineContent["type"] }
   | { id: "type"; label: "Standards"; type: DoctrineContent["type"] }
   | { id: "type"; label: "Overviews"; type: DoctrineContent["type"] }
@@ -195,14 +194,17 @@ type FilterChip =
 const CHIPS: FilterChip[] = [
   { id: "all", label: "All" },
   { id: "new", label: "New & Updated" },
+  { id: "trending", label: "Trending" },
   { id: "yours", label: "Your roles" },
-  { id: "saved", label: "Saved" },
-  { id: "downloaded", label: "Offline" },
   { id: "type", label: "Task Sheets", type: "task-sheet" },
   { id: "type", label: "Standards", type: "standard" },
   { id: "type", label: "Overviews", type: "overview" },
   { id: "type", label: "Roles", type: "role" },
 ]
+
+// A doc qualifies as "trending" if its synthetic read count is in the top
+// quartile of the feed. We compute the threshold once per feed render.
+const TRENDING_TOP_N = 8
 
 type ActiveChip = (typeof CHIPS)[number]
 
@@ -318,13 +320,21 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
     [userServiceAreas]
   )
 
+  // Compute the trending set once — top N by reads, used by the chip filter.
+  const trendingIds = useMemo(() => {
+    const ids = [...feed]
+      .sort((a, b) => b.reads - a.reads)
+      .slice(0, TRENDING_TOP_N)
+      .map((i) => i.id)
+    return new Set(ids)
+  }, [feed])
+
   // ---- Filtering ----
   const filtered = useMemo(() => {
     return feed.filter((item) => {
       // Active chip
       if (activeChip.id === "new" && item.change === "unchanged") return false
-      if (activeChip.id === "saved" && !savedItems.has(item.id)) return false
-      if (activeChip.id === "downloaded" && downloadStates[item.id] !== "downloaded") return false
+      if (activeChip.id === "trending" && !trendingIds.has(item.id)) return false
       if (activeChip.id === "yours" && !matchesUserRoles(item)) return false
       if (activeChip.id === "type" && "type" in activeChip && item.type !== activeChip.type) return false
       // Search
@@ -338,7 +348,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
       }
       return true
     })
-  }, [feed, activeChip, savedItems, downloadStates, searchQuery, matchesUserRoles])
+  }, [feed, activeChip, trendingIds, searchQuery, matchesUserRoles])
 
   // ---- Group by time bucket ----
   const grouped = useMemo(() => {
@@ -505,20 +515,10 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{item.summary}</p>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <Clock className="w-3 h-3" aria-hidden />
-                {item.readTime}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Eye className="w-3 h-3" aria-hidden />
-                {item.reads}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Bookmark className="w-3 h-3" aria-hidden />
-                {item.bookmarkers}
-              </span>
-            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock className="w-3 h-3" aria-hidden />
+              {item.readTime}
+            </span>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={(e) => handleDownload(item.id, e)}
@@ -577,9 +577,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             </button>
             <div className="flex-1 min-w-0">
               <h1 className="text-lg font-semibold text-foreground">Feed</h1>
-              <p className="text-xs text-muted-foreground">
-                What's new in doctrine — for your roles
-              </p>
             </div>
             <button
               onClick={triggerRefresh}
