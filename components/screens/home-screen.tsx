@@ -222,8 +222,21 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     if (!el) return
     if (dragState.current.active) {
       el.style.scrollSnapType = "x mandatory"
-      // Snap to nearest after drag ends
+      const dragDelta = el.scrollLeft - dragState.current.startScroll
+      const last = recCardRefs.current.length - 1
       requestAnimationFrame(() => {
+        // Loop: if user dragged forward and was already at the last card,
+        // wrap to the first. Same in reverse from the first card.
+        const FORWARD_INTENT = 30
+        if (activeRec === last && dragDelta > FORWARD_INTENT) {
+          scrollToRec(0)
+          return
+        }
+        if (activeRec === 0 && dragDelta < -FORWARD_INTENT) {
+          scrollToRec(last)
+          return
+        }
+        // Otherwise: snap to nearest
         const center = el.scrollLeft + el.clientWidth / 2
         let bestIdx = 0
         let bestDist = Infinity
