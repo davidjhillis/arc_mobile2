@@ -471,18 +471,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-            <ChangeBadge item={item} />
-            {personal && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-foreground text-[10px] font-semibold">
-                <Sparkles className="w-2.5 h-2.5 text-warning" aria-hidden /> Your roles
-              </span>
-            )}
-            {!isRead && item.change === "unchanged" && (
-              <span className="w-1.5 h-1.5 rounded-full bg-interactive" aria-label="Unread" />
-            )}
-          </div>
-
           <h3 className={cn("text-sm font-semibold leading-snug mb-1", isRead ? "text-foreground/85" : "text-foreground")}>
             {item.title}
           </h3>
@@ -499,8 +487,20 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
 
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{item.summary}</p>
 
-          <div className="flex items-center justify-end">
-            <div className="flex items-center gap-1.5">
+          {/* Bottom row: badges on the left, actions on the right */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <ChangeBadge item={item} />
+              {personal && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-foreground text-[10px] font-semibold">
+                  <Sparkles className="w-2.5 h-2.5 text-warning" aria-hidden /> Your roles
+                </span>
+              )}
+              {!isRead && item.change === "unchanged" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-interactive" aria-label="Unread" />
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={(e) => handleDownload(item.id, e)}
                 disabled={isDownloading || isDownloaded}
