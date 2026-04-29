@@ -11,6 +11,7 @@ import {
   Handshake,
   Briefcase,
   HardHat,
+  ChevronLeft,
   ChevronRight,
   Clock,
 } from "lucide-react"
@@ -351,21 +352,47 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             })}
           </div>
           {recommended.length > 1 && (
-            <div className="flex items-center justify-center gap-1.5 mt-2" role="tablist" aria-label="Recommended pagination">
-              {recommended.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeRec === i}
-                  aria-label={`Go to recommendation ${i + 1}`}
-                  onClick={() => scrollToRec(i)}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all",
-                    activeRec === i ? "w-5 bg-interactive" : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
-                  )}
-                />
-              ))}
+            <div className="flex items-center justify-center gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => scrollToRec(Math.max(0, activeRec - 1))}
+                disabled={activeRec === 0}
+                aria-label="Previous recommendation"
+                className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:border-interactive/40 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4 text-foreground" />
+              </button>
+              <div
+                className="flex items-center gap-1.5"
+                role="tablist"
+                aria-label="Recommended pagination"
+              >
+                {recommended.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeRec === i}
+                    aria-label={`Go to recommendation ${i + 1}`}
+                    onClick={() => scrollToRec(i)}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      activeRec === i
+                        ? "w-5 bg-interactive"
+                        : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
+                    )}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => scrollToRec(Math.min(recommended.length - 1, activeRec + 1))}
+                disabled={activeRec === recommended.length - 1}
+                aria-label="Next recommendation"
+                className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:border-interactive/40 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4 text-foreground" />
+              </button>
             </div>
           )}
         </section>
