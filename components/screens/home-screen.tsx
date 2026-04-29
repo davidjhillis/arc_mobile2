@@ -393,7 +393,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                     <span>
                       {doc.category} · {doc.readTime}
                     </span>
-                    {expanded ? (
+                    {expanded && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -404,10 +404,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                         Open article
                         <ChevronRight className="w-3 h-3" aria-hidden />
                       </button>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
-                        Tap to preview <ChevronRight className="w-3 h-3" aria-hidden />
-                      </span>
                     )}
                   </div>
                 </div>
