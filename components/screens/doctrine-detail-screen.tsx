@@ -17,18 +17,14 @@ import {
   ChevronDown,
   List,
   MessageSquare,
-  Play,
-  Pause,
   WifiOff,
-  FileText,
   X,
-  SkipBack,
-  SkipForward,
-  Gauge,
   ThumbsUp,
   ThumbsDown,
   Info,
   Loader2,
+  MoreHorizontal,
+  ArrowUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -37,7 +33,7 @@ import { massCareContent } from "@/lib/mass-care-content"
 
 interface DoctrineDetailScreenProps {
   doctrineId: string | null
-  onNavigate: (screen: Screen) => void
+  onNavigate: (screen: Screen, disasterType?: string, doctrineId?: string, group?: string) => void
 }
 
 const doctrineContent: Record<
@@ -865,6 +861,10 @@ interface TocItem {
 export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailScreenProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isDownloaded, setIsDownloaded] = useState(false)
+  const [headerCondensed, setHeaderCondensed] = useState(false)
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const [aiSheetOpen, setAiSheetOpen] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [readProgress, setReadProgress] = useState(0)
   const [showToc, setShowToc] = useState(false)
@@ -1051,95 +1051,174 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     const scrollHeight = target.scrollHeight - target.clientHeight
     const progress = (target.scrollTop / scrollHeight) * 100
     setReadProgress(Math.min(100, Math.max(0, progress)))
+    setHeaderCondensed(target.scrollTop > 120)
+  }
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  // Map specific H2 section titles to a callout flavor that emphasises action.
+  const calloutForHeading = (title: string): string | null => {
+    const t = title.toLowerCase().trim()
+    if (t === "what to do" || t === "steps" || t === "procedure") return "what-to-do"
+    if (t === "considerations" || t === "things to consider" || t === "cautions") return "considerations"
+    if (t.startsWith("typically performed by") || t === "performed by" || t === "who completes this")
+      return "performed-by"
+    if (t.startsWith("supporting on the task") || t === "supporting roles" || t === "who supports")
+      return "supporting"
+    return null
+  }
+
+  const renderInlineSpans = (text: string, keyBase: string): React.ReactNode[] => {
+    const out: React.ReactNode[] = []
+    const re = /(\*\*[^*]+\*\*)|(`[^`]+`)/g
+    let last = 0
+    let m: RegExpExecArray | null
+    let i = 0
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index))
+      const tok = m[0]
+      if (tok.startsWith("**")) {
+        out.push(<strong key={`${keyBase}-b-${i++}`}>{tok.slice(2, -2)}</strong>)
+      } else {
+        out.push(<code key={`${keyBase}-c-${i++}`}>{tok.slice(1, -1)}</code>)
+      }
+      last = m.index + tok.length
+    }
+    if (last < text.length) out.push(text.slice(last))
+    return out
   }
 
   const renderContent = (content: string) => {
     const lines = content.trim().split("\n")
-    const elements: JSX.Element[] = []
+    // Group elements by H2 section. Each section can be tagged as a callout.
+    type Section = {
+      heading: { title: string; id: string; level: 2 | 3 } | null
+      callout: string | null
+      body: JSX.Element[]
+    }
+    const sections: Section[] = []
+    let current: Section = { heading: null, callout: null, body: [] }
     let listItems: string[] = []
-    let inList = false
     let h2Index = 0
     let h3Index = 0
+    let elIndex = 0
 
     const flushList = () => {
-      if (listItems.length > 0) {
-        elements.push(
-          <ul key={`list-${elements.length}`} className="space-y-2 my-4 ml-4">
-            {listItems.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0" />
-                <span className="text-foreground/80">{item}</span>
-              </li>
-            ))}
-          </ul>,
-        )
-        listItems = []
-      }
-      inList = false
+      if (listItems.length === 0) return
+      const items = listItems
+      listItems = []
+      current.body.push(
+        <ul key={`list-${elIndex++}`}>
+          {items.map((item, idx) => (
+            <li key={idx}>{renderInlineSpans(item, `${elIndex}-${idx}`)}</li>
+          ))}
+        </ul>
+      )
     }
 
-    lines.forEach((line, idx) => {
+    const pushSection = () => {
+      // Only push when there's content (skip an initial empty section)
+      if (current.heading || current.body.length > 0) sections.push(current)
+      current = { heading: null, callout: null, body: [] }
+    }
+
+    lines.forEach((line) => {
       const trimmed = line.trim()
 
       if (trimmed.startsWith("## ")) {
         flushList()
-        h2Index++
+        pushSection()
+        h2Index += 1
         h3Index = 0
         const title = trimmed.replace("## ", "")
         const id = `section-${h2Index}`
-        elements.push(
-          <h2 key={idx} id={id} className="text-lg font-semibold text-foreground mt-8 mb-3 first:mt-0 scroll-mt-20">
-            {title}
-          </h2>,
-        )
-      } else if (trimmed.startsWith("### ")) {
+        current.heading = { title, id, level: 2 }
+        current.callout = calloutForHeading(title)
+        return
+      }
+
+      if (trimmed.startsWith("### ")) {
         flushList()
-        h3Index++
+        h3Index += 1
         const title = trimmed.replace("### ", "")
         const id = `subsection-${h2Index}-${h3Index}`
-        elements.push(
-          <h3 key={idx} id={id} className="text-base font-semibold text-foreground mt-6 mb-2 scroll-mt-20">
+        current.body.push(
+          <h3 key={`h3-${elIndex++}`} id={id} className="scroll-mt-24">
             {title}
-          </h3>,
+          </h3>
         )
-      } else if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
-        flushList()
-        elements.push(
-          <h3 key={idx} className="text-base font-semibold text-foreground mt-6 mb-2">
-            {trimmed.replace(/\*\*/g, "")}
-          </h3>,
-        )
-      } else if (trimmed.startsWith("- ")) {
-        inList = true
-        listItems.push(trimmed.replace("- ", ""))
-      } else if (trimmed.match(/^\d+\.\s/)) {
-        inList = true
-        listItems.push(trimmed.replace(/^\d+\.\s/, ""))
-      } else if (trimmed === "") {
-        flushList()
-      } else if (trimmed) {
-        flushList()
-        // Handle inline bold
-        const parts = trimmed.split(/(\*\*[^*]+\*\*)/)
-        elements.push(
-          <p key={idx} className="text-foreground/80 leading-relaxed my-3">
-            {parts.map((part, pIdx) => {
-              if (part.startsWith("**") && part.endsWith("**")) {
-                return (
-                  <strong key={pIdx} className="font-semibold text-foreground">
-                    {part.replace(/\*\*/g, "")}
-                  </strong>
-                )
-              }
-              return part
-            })}
-          </p>,
-        )
+        return
       }
+
+      if (trimmed.startsWith("**") && trimmed.endsWith("**") && !trimmed.includes(" ")) {
+        // Treat single-token bold-only line as a sub-heading
+        flushList()
+        current.body.push(
+          <h3 key={`h3-${elIndex++}`}>{trimmed.replace(/\*\*/g, "")}</h3>
+        )
+        return
+      }
+
+      if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        listItems.push(trimmed.replace(/^[-*]\s+/, ""))
+        return
+      }
+
+      if (/^\d+\.\s/.test(trimmed)) {
+        listItems.push(trimmed.replace(/^\d+\.\s/, ""))
+        return
+      }
+
+      if (trimmed === "") {
+        flushList()
+        return
+      }
+
+      flushList()
+      current.body.push(
+        <p key={`p-${elIndex++}`}>{renderInlineSpans(trimmed, `p-${elIndex}`)}</p>
+      )
     })
 
     flushList()
-    return elements
+    pushSection()
+
+    return sections.map((s, idx) => {
+      const heading = s.heading ? (
+        <h2 id={s.heading.id} className="scroll-mt-24">
+          {s.heading.title}
+        </h2>
+      ) : null
+
+      // Performed-by / supporting are short — render as compact label rows.
+      if (s.callout === "performed-by" || s.callout === "supporting") {
+        const label = s.callout === "performed-by" ? "Typically performed by" : "Supporting on the task"
+        return (
+          <div key={idx} data-callout={s.callout} id={s.heading?.id}>
+            <h3>{label}</h3>
+            <div className="text-[15px] text-foreground/90 mt-1">{s.body}</div>
+          </div>
+        )
+      }
+
+      if (s.callout) {
+        return (
+          <div key={idx} data-callout={s.callout} id={s.heading?.id}>
+            <h3>{s.heading?.title ?? ""}</h3>
+            {s.body}
+          </div>
+        )
+      }
+
+      return (
+        <section key={idx}>
+          {heading}
+          {s.body}
+        </section>
+      )
+    })
   }
 
   const scrollToSection = (id: string) => {
@@ -1219,380 +1298,188 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Progress bar */}
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted z-20">
-        <div className="h-full bg-interactive transition-all duration-150" style={{ width: `${readProgress}%` }} />
+    <div className="relative flex flex-col h-full bg-background">
+      {/* Reading-progress bar at the very top edge */}
+      <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted z-30">
+        <div
+          className="h-full bg-interactive transition-all duration-150"
+          style={{ width: `${readProgress}%` }}
+        />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-background">
-        <div className="px-5 pt-12 pb-4">
-          <div className="flex items-center justify-between mb-4">
+      {/* Slim sticky top bar — back · contextual title · overflow menu */}
+      <header
+        className={cn(
+          "sticky top-0 z-20 transition-colors",
+          headerCondensed ? "bg-background/95 backdrop-blur-md border-b border-border" : "bg-background"
+        )}
+      >
+        <div className="flex items-center gap-2 px-3 pt-12 pb-2">
+          <button
+            onClick={() => onNavigate("doctrine")}
+            aria-label="Back"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted"
+          >
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+          </button>
+          <div className="flex-1 min-w-0 px-1">
+            {headerCondensed && (
+              <p className="text-sm font-semibold text-foreground truncate">{doctrine.title}</p>
+            )}
+          </div>
+          <div className="relative">
             <button
-              onClick={() => onNavigate("doctrine")}
-              className="w-10 h-10 rounded-full bg-muted flex items-center justify-center active:scale-95 transition-transform"
+              onClick={() => setOverflowOpen((s) => !s)}
+              aria-label="Article actions"
+              aria-expanded={overflowOpen}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted"
             >
-              <ArrowLeft className="w-5 h-5 text-foreground" />
+              <MoreHorizontal className="w-5 h-5 text-foreground" />
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsBookmarked(!isBookmarked)}
-                className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all",
-                  isBookmarked ? "bg-interactive/10" : "bg-muted",
-                )}
-              >
-                {isBookmarked ? (
-                  <BookmarkCheck className="w-5 h-5 text-interactive" />
-                ) : (
-                  <Bookmark className="w-5 h-5 text-foreground" />
-                )}
-              </button>
-              <button
-                onClick={handleDownload}
-                disabled={isDownloading || isDownloaded}
-                className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all",
-                  isDownloaded ? "bg-success/10" : "bg-muted",
-                )}
-              >
-                {isDownloading ? (
-                  <DownloadCloud className="w-5 h-5 text-muted-foreground animate-pulse" />
-                ) : isDownloaded ? (
-                  <Check className="w-5 h-5 text-success" />
-                ) : (
-                  <Download className="w-5 h-5 text-foreground" />
-                )}
-              </button>
-              <button className="w-10 h-10 rounded-full bg-muted flex items-center justify-center active:scale-95 transition-transform">
-                <Share2 className="w-5 h-5 text-foreground" />
-              </button>
-            </div>
-          </div>
-
-          {/* Meta tags */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2 py-0.5 bg-muted text-foreground text-xs font-medium rounded-full">
-              {doctrine.category}
-            </span>
-            <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">
-              {doctrine.disasterType}
-            </span>
-          </div>
-
-          {/* Title */}
-          <h1 className="text-xl font-semibold text-foreground leading-tight text-balance">{doctrine.title}</h1>
-
-          {/* Reading info */}
-          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4" />
-              {doctrine.readTime} read
-            </span>
-            <span>v{doctrine.version}</span>
-            <span>Updated {doctrine.lastUpdated}</span>
+            {overflowOpen && (
+              <>
+                {/* Backdrop to close the menu on outside click */}
+                <button
+                  type="button"
+                  aria-hidden
+                  onClick={() => setOverflowOpen(false)}
+                  className="fixed inset-0 z-30 cursor-default"
+                  tabIndex={-1}
+                />
+                <div
+                  role="menu"
+                  className="absolute right-0 top-12 z-40 w-56 rounded-2xl bg-card border border-border shadow-lg overflow-hidden"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setIsBookmarked((b) => !b)
+                      setOverflowOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm"
+                  >
+                    {isBookmarked ? (
+                      <BookmarkCheck className="w-4 h-4 text-interactive" />
+                    ) : (
+                      <Bookmark className="w-4 h-4 text-foreground" />
+                    )}
+                    <span className="text-foreground">{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      handleDownload()
+                      setOverflowOpen(false)
+                    }}
+                    disabled={isDownloading || isDownloaded}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm disabled:opacity-60"
+                  >
+                    {isDownloading ? (
+                      <DownloadCloud className="w-4 h-4 text-muted-foreground animate-pulse" />
+                    ) : isDownloaded ? (
+                      <Check className="w-4 h-4 text-success" />
+                    ) : (
+                      <Download className="w-4 h-4 text-foreground" />
+                    )}
+                    <span className="text-foreground">
+                      {isDownloaded ? "Saved offline" : isDownloading ? "Saving…" : "Save offline"}
+                    </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => setOverflowOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm border-t border-border"
+                  >
+                    <Share2 className="w-4 h-4 text-foreground" />
+                    <span className="text-foreground">Share</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
 
-      {/* AI Assists - Above TOC */}
-      <div className="px-5 pt-2 pb-4">
-        <div id="ai-tools-container" className="flex flex-wrap gap-3">
-          <button
-            onClick={() => {
-              if (showSummary) {
-                setShowSummary(false)
-              } else {
-                // Close other widgets
-                setShowAskAI(false)
-                // Reset summary state to allow regeneration
-                setSummaryGenerated(false)
-                setAiSummary("")
-                setAiKeyPoints([])
-                // Open summary
-                setShowSummary(true)
-              }
-            }}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2.5 bg-muted/50 rounded-xl text-sm font-medium transition-all active:scale-[0.97]",
-              showSummary
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-foreground hover:bg-muted",
+      {/* Scrollable article body */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto"
+        onScroll={handleScroll}
+      >
+        {/* Hero — scrolls away when reading */}
+        <div className="px-5 pt-2 pb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-2.5 py-1 bg-muted text-foreground text-xs font-medium rounded-full">
+              {doctrine.category}
+            </span>
+            {doctrine.disasterType && doctrine.disasterType !== doctrine.category && (
+              <span className="px-2.5 py-1 bg-muted text-muted-foreground text-xs rounded-full">
+                {doctrine.disasterType}
+              </span>
             )}
-          >
-            <Sparkles className={cn("w-4 h-4", showSummary && "text-primary-foreground")} />
-            <span>Summarize</span>
-          </button>
-          <button
-            onClick={() => {
-              if (showAskAI) {
-                setShowAskAI(false)
-              } else {
-                // Close other widgets
-                setShowSummary(false)
-                // Open ask AI
-                setShowAskAI(true)
-              }
-            }}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2.5 bg-muted/50 rounded-xl text-sm font-medium transition-all active:scale-[0.97]",
-              showAskAI
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-foreground hover:bg-muted",
-            )}
-          >
-            <MessageSquare className={cn("w-4 h-4", showAskAI && "text-primary-foreground")} />
-            <span>Ask</span>
-          </button>
+          </div>
+          <h1 className="text-[1.75rem] leading-[1.15] font-bold text-foreground tracking-tight text-balance">
+            {doctrine.title}
+          </h1>
+          <div className="flex items-center gap-3 mt-4 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-4 h-4" aria-hidden />
+              {doctrine.readTime}
+            </span>
+            <span aria-hidden>·</span>
+            <span>v{doctrine.version}</span>
+            <span aria-hidden>·</span>
+            <span>Updated {doctrine.lastUpdated}</span>
+          </div>
         </div>
 
-        {/* AI Widgets - Appear directly below buttons */}
-        {showSummary && (
-          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-interactive/10 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-interactive" />
-                </div>
-                <h4 className="text-sm font-semibold text-foreground">AI Summary</h4>
-              </div>
-              <button
-                onClick={() => setShowSummary(false)}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
+        {/* Lead summary */}
+        <div className="px-5">
+          <p className="text-[17px] leading-[1.55] text-foreground/85 font-medium pb-5 border-b border-border">
+            {doctrine.summary}
+          </p>
+        </div>
 
-            {!aiSummary && !summaryGenerated ? (
-              <div className="flex items-center gap-3 py-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
-                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
-                </div>
-                <span className="text-sm text-muted-foreground">Generating summary...</span>
-              </div>
-            ) : (
-              <div>
-                <div className="prose prose-sm max-w-none">
-                  {aiSummary && (
-                    <p className="text-foreground/80 leading-relaxed mb-4">
-                      {aiSummary}
-                    </p>
-                  )}
-                  {aiKeyPoints.length > 0 && (
-                    <>
-                      <h4 className="text-sm font-semibold text-foreground mb-2">Key Points:</h4>
-                      <ul className="space-y-2 mb-4 ml-4">
-                        {aiKeyPoints.map((point, idx) => (
-                          <li key={idx} className="text-sm text-foreground/80 list-disc">
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                  {!aiSummary && summaryGenerated && (
-                    <p className="text-sm text-muted-foreground">Generating summary...</p>
-                  )}
-                </div>
-                <div className="text-right mb-4">
-                  <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-interactive transition-colors">
-                    <Info className="w-3.5 h-3.5" />
-                    <span>About AI-based content</span>
-                  </button>
-                </div>
-                <div className="pt-4 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">How was this response?</p>
-                    <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-success hover:text-success hover:bg-success/5 transition-colors">
-                        <ThumbsUp className="w-4 h-4" />
-                        <span>Yes</span>
-                      </button>
-                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
-                        <ThumbsDown className="w-4 h-4" />
-                        <span>No</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-
-        {showAskAI && (
-          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-interactive/10 rounded-lg flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-interactive" />
-                </div>
-                <h4 className="text-sm font-semibold text-foreground">Ask about this article</h4>
-              </div>
-              <button
-                onClick={() => setShowAskAI(false)}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Question Input */}
-            <div className="mb-4">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={askAIQuestion}
-                  onChange={(e) => setAskAIQuestion(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && askAIQuestion.trim() && !isAskingAI) {
-                      e.preventDefault()
-                      handleAskAI(askAIQuestion.trim())
-                    }
-                  }}
-                  placeholder="Ask a question about this article..."
-                  disabled={isAskingAI}
-                  className="flex-1 px-4 py-2.5 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-                />
-                <button
-                  onClick={() => {
-                    if (askAIQuestion.trim() && !isAskingAI) {
-                      handleAskAI(askAIQuestion.trim())
-                    }
-                  }}
-                  disabled={isAskingAI || !askAIQuestion.trim()}
-                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all font-semibold text-sm disabled:opacity-50"
-                >
-                  {isAskingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ask"}
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Questions */}
-            <div className="mb-4">
-              <p className="text-xs text-muted-foreground mb-2">Quick questions:</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleAskAI(`What is ${doctrine.category}?`)}
-                  disabled={isAskingAI}
-                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-                >
-                  What is {doctrine.category}?
-                </button>
-                <button
-                  onClick={() => handleAskAI("How do I implement this?")}
-                  disabled={isAskingAI}
-                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-                >
-                  How do I implement this?
-                </button>
-                <button
-                  onClick={() => handleAskAI("What are the key points?")}
-                  disabled={isAskingAI}
-                  className="px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-                >
-                  What are the key points?
-                </button>
-              </div>
-            </div>
-
-            {/* Answer Area */}
-            <div className="pt-4 border-t border-border">
-              {isAskingAI ? (
-                <div className="flex items-center gap-3 py-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
-                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
-                  </div>
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
-                </div>
-              ) : askAIAnswer ? (
-                <div>
-                  <div className="mb-3">
-                    <p className="text-xs text-muted-foreground mb-1">Question:</p>
-                    <p className="text-sm font-medium text-foreground">{askAIQuestion}</p>
-                  </div>
-                  <div className="mb-4">
-                    <p className="text-xs text-muted-foreground mb-2">Answer:</p>
-                    <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{askAIAnswer}</p>
-                  </div>
-                  <div className="pt-4 border-t border-border">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">Was this answer helpful?</p>
-                      <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-success hover:text-success hover:bg-success/5 transition-colors">
-                          <ThumbsUp className="w-4 h-4" />
-                          <span>Yes</span>
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
-                          <ThumbsDown className="w-4 h-4" />
-                          <span>No</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">Ask a question to get started</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* TOC Button - Always visible */}
-      {tocItems.length > 0 && (
-        <div className="px-5 pb-4 border-b border-border">
-          <button
-            onClick={() => setShowToc(!showToc)}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 border-2 border-border bg-card rounded-lg hover:border-interactive transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <List className="w-5 h-5 text-muted-foreground" />
-              <span className="font-medium text-foreground">Table of Contents</span>
-            </div>
-            <ChevronDown className={cn("w-5 h-5 text-muted-foreground transition-transform", showToc && "rotate-180")} />
-          </button>
-          {showToc && (
-            <div className="mt-3 max-h-64 overflow-y-auto">
-              <nav className="space-y-1">
+        {/* Optional TOC trigger — kept slim, opens an inline list */}
+        {tocItems.length > 0 && (
+          <div className="px-5 pt-4">
+            <button
+              onClick={() => setShowToc(!showToc)}
+              aria-expanded={showToc}
+              className="inline-flex items-center gap-2 px-3.5 h-10 rounded-full bg-muted hover:bg-muted/70 active:scale-95 transition text-sm font-medium text-foreground"
+            >
+              <List className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {showToc ? "Hide contents" : `Contents · ${tocItems.length}`}
+              <ChevronDown
+                className={cn("w-4 h-4 text-muted-foreground transition-transform", showToc && "rotate-180")}
+                aria-hidden
+              />
+            </button>
+            {showToc && (
+              <nav className="mt-3 rounded-2xl bg-card border border-border max-h-72 overflow-y-auto">
                 {tocItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => scrollToSection(item.id)}
                     className={cn(
-                      "w-full text-left px-4 py-2 rounded-lg text-sm transition-colors",
+                      "w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-muted",
                       item.level === 2
-                        ? "font-medium text-foreground hover:bg-muted"
-                        : "text-muted-foreground hover:bg-muted pl-8",
+                        ? "font-medium text-foreground"
+                        : "text-muted-foreground pl-8"
                     )}
                   >
                     {item.title}
                   </button>
                 ))}
               </nav>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
-      {/* Article content */}
-      <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
-        <div className="px-5 py-6">
-          {/* Summary */}
-          <p className="text-base text-foreground/90 leading-relaxed font-medium mb-6 pb-6 border-b border-border">
-            {doctrine.summary}
-          </p>
-
-          {/* Video Player */}
+        {/* Video */}
+        <div className="px-5 pt-5">
           {isOnline ? (
-            <div className="mb-8 rounded-xl overflow-hidden border border-border bg-card">
+            <div className="rounded-2xl overflow-hidden border border-border bg-card">
               <div className="aspect-video w-full">
                 <iframe
                   className="w-full h-full"
@@ -1604,45 +1491,264 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               </div>
             </div>
           ) : (
-            <div className="mb-8 rounded-xl overflow-hidden border border-border bg-card">
+            <div className="rounded-2xl overflow-hidden border border-border bg-card">
               <div className="aspect-video bg-muted flex items-center justify-center p-6">
                 <div className="text-center">
-                  <WifiOff className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm font-medium text-foreground mb-1">Video unavailable offline</p>
-                  <p className="text-xs text-muted-foreground">This content requires an internet connection</p>
+                  <WifiOff className="w-10 h-10 text-muted-foreground mx-auto mb-3" aria-hidden />
+                  <p className="text-sm font-medium text-foreground">Video unavailable offline</p>
+                  <p className="text-xs text-muted-foreground mt-1">Reconnect to play this training clip</p>
                 </div>
               </div>
             </div>
           )}
+        </div>
 
-          {/* Main content */}
-          <article className="prose-mobile">{renderContent(doctrine.content)}</article>
+        {/* Article body */}
+        <article className="prose-arc px-5 pt-6">{renderContent(doctrine.content)}</article>
 
-          {/* Related documents */}
-          <div className="mt-8 pt-6 border-t border-border">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">
-              Related Doctrine
-            </h3>
+        {/* Related — reframed for action */}
+        {doctrine.relatedDocs.length > 0 && (
+          <section className="px-5 pt-10">
+            <h2 className="text-base font-semibold text-foreground mb-1">After this, you'll likely need</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Related task sheets and standards that pair with this article.
+            </p>
             <div className="space-y-2">
               {doctrine.relatedDocs.map((doc) => (
                 <button
                   key={doc.id}
-                  onClick={() => {
-                    // Navigate to related doc
-                  }}
-                  className="w-full flex items-center justify-between p-4 bg-card rounded-xl border border-border active:scale-[0.99] transition-transform"
+                  onClick={() => onNavigate("doctrine-detail", undefined, doc.id)}
+                  className="w-full flex items-center justify-between gap-3 p-4 bg-card rounded-2xl border border-border active:scale-[0.99] hover:border-interactive/40 transition"
                 >
-                  <span className="text-sm font-medium text-foreground">{doc.title}</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground text-left">{doc.title}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
                 </button>
               ))}
             </div>
-          </div>
+          </section>
+        )}
 
-          {/* Bottom padding for safe area */}
-          <div className="h-24" />
-        </div>
+        {/* Spacer for FAB / nav */}
+        <div className="h-32" />
       </div>
+
+      {/* Floating Ask AI button — bottom right, above the nav */}
+      <button
+        onClick={() => setAiSheetOpen(true)}
+        aria-label="Ask AI about this article"
+        className="fixed z-30 bottom-24 right-4 max-w-lg-margin h-14 pl-4 pr-5 rounded-full bg-foreground text-background flex items-center gap-2.5 shadow-lg active:scale-95 transition"
+        style={{ right: "max(1rem, calc(50vw - 16rem + 1rem))" }}
+      >
+        <Sparkles className="w-5 h-5" aria-hidden />
+        <span className="text-sm font-semibold">Ask AI</span>
+      </button>
+
+      {/* Read-progress percentage pill — bottom left, above the nav */}
+      {readProgress > 3 && (
+        <button
+          onClick={scrollToTop}
+          aria-label="Back to top"
+          className="fixed z-30 bottom-24 left-4 h-10 px-3.5 rounded-full bg-card border border-border text-xs font-semibold text-muted-foreground shadow-sm active:scale-95 transition flex items-center gap-1.5"
+          style={{ left: "max(1rem, calc(50vw - 16rem + 1rem))" }}
+        >
+          <ArrowUp className="w-3.5 h-3.5" aria-hidden />
+          {Math.round(readProgress)}%
+        </button>
+      )}
+
+      {/* AI bottom sheet — opens on FAB tap, hosts both Summarize and Ask flows */}
+      {aiSheetOpen && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            onClick={() => setAiSheetOpen(false)}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI assistance"
+            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85vh] overflow-y-auto"
+          >
+            <div className="sticky top-0 bg-card pt-2 pb-3 border-b border-border">
+              <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
+              <div className="flex items-center justify-between px-5">
+                <h2 className="text-base font-semibold text-foreground">AI assistance</h2>
+                <button
+                  onClick={() => setAiSheetOpen(false)}
+                  aria-label="Close"
+                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted active:scale-95 transition"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              {/* Action chips */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (!showSummary) {
+                      setShowAskAI(false)
+                      setSummaryGenerated(false)
+                      setAiSummary("")
+                      setAiKeyPoints([])
+                    }
+                    setShowSummary(!showSummary)
+                  }}
+                  aria-pressed={showSummary}
+                  className={cn(
+                    "flex-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl text-sm font-medium transition",
+                    showSummary
+                      ? "bg-interactive text-interactive-foreground"
+                      : "bg-muted text-foreground hover:bg-muted/70"
+                  )}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Summarize
+                </button>
+                <button
+                  onClick={() => {
+                    if (!showAskAI) setShowSummary(false)
+                    setShowAskAI(!showAskAI)
+                  }}
+                  aria-pressed={showAskAI}
+                  className={cn(
+                    "flex-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl text-sm font-medium transition",
+                    showAskAI
+                      ? "bg-interactive text-interactive-foreground"
+                      : "bg-muted text-foreground hover:bg-muted/70"
+                  )}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Ask
+                </button>
+              </div>
+
+              {/* Summary panel */}
+              {showSummary && (
+                <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 p-5">
+                  {!aiSummary && !summaryGenerated ? (
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
+                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                        <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                      </div>
+                      <span className="text-sm text-muted-foreground">Generating summary…</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {aiSummary && <p className="text-[15px] leading-relaxed text-foreground">{aiSummary}</p>}
+                      {aiKeyPoints.length > 0 && (
+                        <>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-2">
+                            Key points
+                          </h4>
+                          <ul className="space-y-1.5 list-disc pl-5 text-[15px] text-foreground">
+                            {aiKeyPoints.map((point, idx) => (
+                              <li key={idx}>{point}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-interactive/15">
+                        <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5" aria-hidden />
+                          AI summary — verify against doctrine
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button aria-label="Helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-success transition">
+                            <ThumbsUp className="w-4 h-4" />
+                          </button>
+                          <button aria-label="Not helpful" className="w-9 h-9 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground hover:text-primary transition">
+                            <ThumbsDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Ask AI panel */}
+              {showAskAI && (
+                <div className="rounded-2xl bg-card border border-border p-5">
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={askAIQuestion}
+                      onChange={(e) => setAskAIQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && askAIQuestion.trim() && !isAskingAI) {
+                          e.preventDefault()
+                          handleAskAI(askAIQuestion.trim())
+                        }
+                      }}
+                      placeholder="Ask anything about this article…"
+                      disabled={isAskingAI}
+                      className="flex-1 h-11 px-4 rounded-xl bg-muted text-foreground placeholder:text-muted-foreground text-[15px] focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50"
+                    />
+                    <button
+                      onClick={() => askAIQuestion.trim() && !isAskingAI && handleAskAI(askAIQuestion.trim())}
+                      disabled={isAskingAI || !askAIQuestion.trim()}
+                      className="w-11 h-11 rounded-full bg-interactive text-interactive-foreground active:scale-95 transition flex items-center justify-center disabled:opacity-50"
+                      aria-label="Send question"
+                    >
+                      {isAskingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[
+                      `What is ${doctrine.category}?`,
+                      "How do I implement this?",
+                      "What are the key points?",
+                    ].map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => handleAskAI(q)}
+                        disabled={isAskingAI}
+                        className="px-3 py-1.5 rounded-full bg-muted text-xs font-medium text-foreground hover:bg-muted/70 active:scale-95 transition disabled:opacity-50"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pt-3 border-t border-border min-h-[3rem]">
+                    {isAskingAI ? (
+                      <div className="flex items-center gap-3 py-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                          <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                        </div>
+                        <span className="text-sm text-muted-foreground">Thinking…</span>
+                      </div>
+                    ) : askAIAnswer ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">{askAIQuestion}</p>
+                        <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">
+                          {askAIAnswer}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Tap a quick question or type your own.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!showSummary && !showAskAI && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Pick an action above to summarise or ask about this article.
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
