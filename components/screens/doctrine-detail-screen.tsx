@@ -1537,26 +1537,28 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         <div className="h-32" />
       </div>
 
-      {/* Share confirmation toast */}
-      {shareState !== "idle" && (
+      {/* Subtle share confirmation — top-anchored, card surface, only when there's
+          something to say (the OS share sheet already confirms a real share). */}
+      {(shareState === "copied" || shareState === "failed") && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed z-40 bottom-28 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full bg-foreground text-background text-sm font-medium shadow-lg flex items-center gap-2"
-        >
-          {shareState === "shared" && (
-            <>
-              <Check className="w-4 h-4 text-success" aria-hidden />
-              Shared
-            </>
+          className={cn(
+            "fixed z-40 top-20 left-1/2 -translate-x-1/2",
+            "inline-flex items-center gap-2 px-3.5 py-2 rounded-full",
+            "bg-card border border-border shadow-md",
+            "text-[13px] font-medium text-foreground",
+            "animate-in fade-in slide-in-from-top-2 duration-200"
           )}
-          {shareState === "copied" && (
+        >
+          {shareState === "copied" ? (
             <>
-              <Check className="w-4 h-4 text-success" aria-hidden />
+              <Check className="w-3.5 h-3.5 text-success" aria-hidden />
               Link copied
             </>
+          ) : (
+            <span className="text-muted-foreground">Couldn't share</span>
           )}
-          {shareState === "failed" && <>Couldn't share — try again</>}
         </div>
       )}
 
