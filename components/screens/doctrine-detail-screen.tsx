@@ -23,7 +23,6 @@ import {
   ThumbsDown,
   Info,
   Loader2,
-  MoreHorizontal,
   ArrowUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -862,7 +861,6 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [headerCondensed, setHeaderCondensed] = useState(false)
-  const [overflowOpen, setOverflowOpen] = useState(false)
   const [aiSheetOpen, setAiSheetOpen] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -1307,18 +1305,18 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         />
       </div>
 
-      {/* Slim sticky top bar — back · contextual title · overflow menu */}
+      {/* Top rail — back · contextual title (on scroll) · action icons including Ask AI */}
       <header
         className={cn(
           "sticky top-0 z-20 transition-colors",
           headerCondensed ? "bg-background/95 backdrop-blur-md border-b border-border" : "bg-background"
         )}
       >
-        <div className="flex items-center gap-2 px-3 pt-12 pb-2">
+        <div className="flex items-center gap-1 px-2 pt-12 pb-2">
           <button
             onClick={() => onNavigate("doctrine")}
             aria-label="Back"
-            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted shrink-0"
           >
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
@@ -1327,76 +1325,45 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               <p className="text-sm font-semibold text-foreground truncate">{doctrine.title}</p>
             )}
           </div>
-          <div className="relative">
-            <button
-              onClick={() => setOverflowOpen((s) => !s)}
-              aria-label="Article actions"
-              aria-expanded={overflowOpen}
-              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-muted"
-            >
-              <MoreHorizontal className="w-5 h-5 text-foreground" />
-            </button>
-            {overflowOpen && (
-              <>
-                {/* Backdrop to close the menu on outside click */}
-                <button
-                  type="button"
-                  aria-hidden
-                  onClick={() => setOverflowOpen(false)}
-                  className="fixed inset-0 z-30 cursor-default"
-                  tabIndex={-1}
-                />
-                <div
-                  role="menu"
-                  className="absolute right-0 top-12 z-40 w-56 rounded-2xl bg-card border border-border shadow-lg overflow-hidden"
-                >
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setIsBookmarked((b) => !b)
-                      setOverflowOpen(false)
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm"
-                  >
-                    {isBookmarked ? (
-                      <BookmarkCheck className="w-4 h-4 text-interactive" />
-                    ) : (
-                      <Bookmark className="w-4 h-4 text-foreground" />
-                    )}
-                    <span className="text-foreground">{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
-                  </button>
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      handleDownload()
-                      setOverflowOpen(false)
-                    }}
-                    disabled={isDownloading || isDownloaded}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm disabled:opacity-60"
-                  >
-                    {isDownloading ? (
-                      <DownloadCloud className="w-4 h-4 text-muted-foreground animate-pulse" />
-                    ) : isDownloaded ? (
-                      <Check className="w-4 h-4 text-success" />
-                    ) : (
-                      <Download className="w-4 h-4 text-foreground" />
-                    )}
-                    <span className="text-foreground">
-                      {isDownloaded ? "Saved offline" : isDownloading ? "Saving…" : "Save offline"}
-                    </span>
-                  </button>
-                  <button
-                    role="menuitem"
-                    onClick={() => setOverflowOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted text-sm border-t border-border"
-                  >
-                    <Share2 className="w-4 h-4 text-foreground" />
-                    <span className="text-foreground">Share</span>
-                  </button>
-                </div>
-              </>
+          <button
+            onClick={() => setAiSheetOpen(true)}
+            aria-label="Ask AI about this article"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-interactive-soft/40 shrink-0"
+          >
+            <Sparkles className="w-5 h-5 text-interactive" />
+          </button>
+          <button
+            onClick={() => setIsBookmarked(!isBookmarked)}
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
+            aria-pressed={isBookmarked}
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-muted shrink-0"
+          >
+            {isBookmarked ? (
+              <BookmarkCheck className="w-5 h-5 text-interactive" />
+            ) : (
+              <Bookmark className="w-5 h-5 text-foreground" />
             )}
-          </div>
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading || isDownloaded}
+            aria-label={isDownloaded ? "Saved offline" : "Save offline"}
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-muted shrink-0 disabled:opacity-100"
+          >
+            {isDownloading ? (
+              <DownloadCloud className="w-5 h-5 text-muted-foreground animate-pulse" />
+            ) : isDownloaded ? (
+              <Check className="w-5 h-5 text-success" />
+            ) : (
+              <Download className="w-5 h-5 text-foreground" />
+            )}
+          </button>
+          <button
+            aria-label="Share"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-muted shrink-0"
+          >
+            <Share2 className="w-5 h-5 text-foreground" />
+          </button>
         </div>
       </header>
 
@@ -1532,24 +1499,13 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         <div className="h-32" />
       </div>
 
-      {/* Floating Ask AI button — bottom right, above the nav */}
-      <button
-        onClick={() => setAiSheetOpen(true)}
-        aria-label="Ask AI about this article"
-        className="fixed z-30 bottom-24 right-4 max-w-lg-margin h-14 pl-4 pr-5 rounded-full bg-foreground text-background flex items-center gap-2.5 shadow-lg active:scale-95 transition"
-        style={{ right: "max(1rem, calc(50vw - 16rem + 1rem))" }}
-      >
-        <Sparkles className="w-5 h-5" aria-hidden />
-        <span className="text-sm font-semibold">Ask AI</span>
-      </button>
-
-      {/* Read-progress percentage pill — bottom left, above the nav */}
+      {/* Read-progress percentage pill — bottom right, above the nav */}
       {readProgress > 3 && (
         <button
           onClick={scrollToTop}
           aria-label="Back to top"
-          className="fixed z-30 bottom-24 left-4 h-10 px-3.5 rounded-full bg-card border border-border text-xs font-semibold text-muted-foreground shadow-sm active:scale-95 transition flex items-center gap-1.5"
-          style={{ left: "max(1rem, calc(50vw - 16rem + 1rem))" }}
+          className="fixed z-30 bottom-24 h-10 px-3.5 rounded-full bg-card border border-border text-xs font-semibold text-muted-foreground shadow-sm active:scale-95 transition flex items-center gap-1.5"
+          style={{ right: "max(1rem, calc(50vw - 16rem + 1rem))" }}
         >
           <ArrowUp className="w-3.5 h-3.5" aria-hidden />
           {Math.round(readProgress)}%
