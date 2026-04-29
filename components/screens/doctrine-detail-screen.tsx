@@ -1257,7 +1257,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               text: doctrine.content,
-              voice: "nova",
+              voice: "shimmer",
               doctrineId: doctrineId
             }),
           })
@@ -1471,7 +1471,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               }
             }}
             className={cn(
-              "inline-flex items-center gap-2 px-5 py-3 bg-muted/50 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              "inline-flex items-center gap-1.5 px-4 py-2.5 bg-muted/50 rounded-xl text-sm font-medium transition-all active:scale-[0.97]",
               showSummary
                 ? "bg-primary text-primary-foreground shadow-md"
                 : "text-foreground hover:bg-muted",
@@ -1500,8 +1500,9 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               }
             }}
             disabled={!isOnline}
+            title="Listen to article"
             className={cn(
-              "inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              "inline-flex items-center justify-center w-10 h-10 rounded-xl transition-all active:scale-[0.97]",
               !isOnline
                 ? "bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed"
                 : showListenPlayer
@@ -1509,8 +1510,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                   : "bg-muted/50 text-foreground hover:bg-muted",
             )}
           >
-            <Headphones className={cn("w-4 h-4", showListenPlayer && "text-primary-foreground")} />
-            <span>Listen</span>
+            <Headphones className={cn("w-5 h-5", showListenPlayer && "text-primary-foreground")} />
           </button>
           <button
             onClick={() => {
@@ -1525,14 +1525,14 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               }
             }}
             className={cn(
-              "inline-flex items-center gap-2 px-5 py-3 bg-muted/50 rounded-2xl text-sm font-semibold transition-all active:scale-[0.97] shadow-sm",
+              "inline-flex items-center gap-1.5 px-4 py-2.5 bg-muted/50 rounded-xl text-sm font-medium transition-all active:scale-[0.97]",
               showAskAI
                 ? "bg-primary text-primary-foreground shadow-md"
                 : "text-foreground hover:bg-muted",
             )}
           >
             <MessageSquare className={cn("w-4 h-4", showAskAI && "text-primary-foreground")} />
-            <span>Ask AI</span>
+            <span>Ask</span>
           </button>
         </div>
 

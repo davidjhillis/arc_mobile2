@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   title: "Red Cross Doctrine",
   description: "Disaster response doctrine for American Red Cross volunteers",
   generator: "v0.app",
+  // iOS Web Clip / PWA settings
+  applicationName: "Red Cross Doctrine",
+  appleWebApp: {
+    capable: true,
+    title: "RC Doctrine",
+    statusBarStyle: "black-translucent",
+  },
   icons: {
     icon: [
       {
@@ -25,8 +32,11 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
-    apple: "/apple-icon.png",
+    // Apple touch icon for home screen (ARC branded)
+    apple: "/arc-web-clip.png",
   },
+  // PWA manifest
+  manifest: "/manifest.json",
 }
 
 export const viewport: Viewport = {
@@ -35,6 +45,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#fafafa",
+  // iOS specific viewport settings
+  viewportFit: "cover",
 }
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
-import { ArrowUp, Loader2, Sparkles, BookOpen, Mic, MicOff } from "lucide-react"
+import { ArrowUp, Loader2, Sparkles, BookOpen, AudioLines, Square, Volume2, VolumeX } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { massCareContent } from "@/lib/mass-care-content"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
@@ -13,7 +13,6 @@ interface Message {
   content: string
   fullContent?: string // Full content if truncated for TTS
   sources?: Array<{ id: string; title: string }>
-  actions?: string[] // Suggested action buttons
   hasMore?: boolean // Whether there's more content to hear
 }
 
@@ -43,6 +42,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   const [isVoiceActive, setIsVoiceActive] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  const [ttsEnabled, setTtsEnabled] = useState(true) // TTS toggle - default enabled
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -101,11 +101,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         role: "assistant",
         content: greetingText,
         sources: undefined,
-        actions: [
-          "How do I set up a shelter?",
-          "What are Mass Care operations?",
-          "Find information about feeding protocols",
-        ],
       }
       setMessages([greetingMessage])
       // Auto-play greeting TTS
@@ -121,6 +116,15 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       handleSend(initialMessage)
     }
   }, [initialMessage])
+
+  // Auto-resize textarea when input or transcript changes
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      const scrollHeight = inputRef.current.scrollHeight
+      inputRef.current.style.height = `${Math.min(scrollHeight, 200)}px`
+    }
+  }, [input, transcript, interimTranscript])
 
   // Check if input is a greeting (not a question) - only for first user message
   const isGreeting = (text: string, isFirstUserMessage: boolean): boolean => {
@@ -202,30 +206,44 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     return { short: shortText, remaining }
   }
 
-  // Play TTS for AI response (short version first)
+  // Play TTS for AI response - full content, no splitting
   const playAudioResponse = async (text: string, messageId?: string) => {
+    // Don't play if TTS is disabled
+    if (!ttsEnabled) {
+      console.log("[AskScreen] TTS disabled, skipping playback")
+      return
+    }
+    
+    if (!text || !text.trim()) {
+      console.warn("[AskScreen] Empty text, skipping TTS")
+      return
+    }
+    
     try {
-      // Split into short and remaining
-      const { short, remaining } = splitTextForTTS(text)
-      const textToSpeak = short.trim()
+      console.log("[AskScreen] Starting TTS for message:", messageId, "text length:", text.length)
       
-      // If there's remaining content, mark message as having more (but keep full content visible)
-      if (remaining.trim() && messageId) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === messageId
-              ? { ...msg, hasMore: true, fullContent: text } // Keep full content, just mark as having more
-              : msg
-          )
-        )
+      // Stop any currently playing audio first
+      if (audioRef.current) {
+        console.log("[AskScreen] Stopping previous audio")
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
       }
-
+      
+      // Clear state - this will trigger useEffect cleanup
+      setIsPlayingAudio(false)
+      setAudioUrl(null)
+      
+      // Small delay to ensure audio element is reset and state cleared
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Play full content - no splitting to ensure complete playback
+      console.log("[AskScreen] Fetching TTS from API")
       const response = await fetch("/api/ai/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: textToSpeak,
-          voice: "nova",
+          text: text.trim(),
+          voice: "shimmer",
           doctrineId: `chat_${Date.now()}_${messageId || "temp"}`,
         }),
       })
@@ -233,57 +251,85 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       if (response.ok) {
         const data = await response.json()
         if (data.audioUrl) {
+          console.log("[AskScreen] TTS API success, setting audio URL:", data.audioUrl)
+          // Set audio URL - this will trigger the useEffect to play it
           setAudioUrl(data.audioUrl)
-          setIsPlayingAudio(true)
+        } else {
+          console.warn("[AskScreen] TTS API returned no audioUrl")
         }
+      } else {
+        const errorText = await response.text()
+        console.error("[AskScreen] TTS API error:", response.status, errorText)
       }
     } catch (error) {
-      console.error("TTS error:", error)
+      console.error("[AskScreen] TTS error:", error)
       // Don't show error to user, just skip TTS
     }
   }
 
-  // Play remaining content
-  const playMoreAudio = async (messageId: string, fullContent: string) => {
-    const { remaining } = splitTextForTTS(fullContent)
-    if (remaining.trim()) {
-      // Play the remaining content
-      try {
-        const response = await fetch("/api/ai/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: remaining.trim(),
-            voice: "nova",
-            doctrineId: `chat_more_${Date.now()}_${messageId}`,
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          if (data.audioUrl) {
-            setAudioUrl(data.audioUrl)
-            setIsPlayingAudio(true)
-            // Mark as no longer having more after playing
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === messageId ? { ...msg, hasMore: false } : msg
-              )
-            )
-          }
-        }
-      } catch (error) {
-        console.error("TTS error:", error)
-      }
-    }
-  }
-
-  // Handle audio playback
+  // Handle audio playback - simplified and more reliable
   useEffect(() => {
-    if (audioUrl && audioRef.current) {
-      audioRef.current.play().catch(console.error)
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (!audioUrl || !ttsEnabled) {
+      if (!ttsEnabled) {
+        // Stop audio if TTS is disabled
+        audio.pause()
+        audio.currentTime = 0
+        setIsPlayingAudio(false)
+      }
+      return
     }
-  }, [audioUrl])
+
+    console.log("[AskScreen] useEffect triggered for audioUrl:", audioUrl)
+    
+    // Simple approach: set src and let browser handle loading/playing
+    const handleCanPlay = () => {
+      console.log("[AskScreen] Audio can play, attempting playback")
+      audio.play().then(() => {
+        console.log("[AskScreen] Audio playback started successfully")
+        setIsPlayingAudio(true)
+      }).catch((error) => {
+        console.error("[AskScreen] Play failed:", error)
+        setIsPlayingAudio(false)
+      })
+    }
+
+    const handleError = () => {
+      const error = audio.error
+      console.error("[AskScreen] Audio error:", {
+        code: error?.code,
+        message: error?.message,
+        networkState: audio.networkState,
+        readyState: audio.readyState
+      })
+      setIsPlayingAudio(false)
+    }
+
+    // Remove old listeners
+    audio.removeEventListener('canplay', handleCanPlay)
+    audio.removeEventListener('error', handleError)
+    audio.removeEventListener('ended', () => {
+      setIsPlayingAudio(false)
+      setAudioUrl(null)
+    })
+    
+    // Add new listeners
+    audio.addEventListener('canplay', handleCanPlay, { once: true })
+    audio.addEventListener('error', handleError, { once: true })
+    audio.addEventListener('ended', () => {
+      console.log("[AskScreen] Audio ended")
+      setIsPlayingAudio(false)
+      setAudioUrl(null)
+    }, { once: true })
+    
+    // Reset and load
+    audio.pause()
+    audio.currentTime = 0
+    audio.load()
+    
+  }, [audioUrl, ttsEnabled])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -370,12 +416,6 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         role: "assistant",
         content: greetingResponse,
         sources: undefined,
-        actions: [
-          "How do I set up a shelter?",
-          "What are Mass Care operations?",
-          "Find information about feeding protocols",
-          "Explain disaster response procedures",
-        ],
       }
       
       setMessages((prev) => [...prev, greetingReply])
@@ -401,8 +441,28 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
     
     try {
       // Find relevant articles for context (only for actual questions)
-      const { context: relevantContext, sources } = findRelevantArticles(messageText)
+      let { context: relevantContext, sources } = findRelevantArticles(messageText)
       responseSources = sources
+      
+      // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
+      const questionLower = messageText.toLowerCase()
+      // Detect questions about Form 215 or who completes/fills/does 215
+      const is215Question = /(who|what|how).*(completes?|fills?|does?|responsible|do).*215|215.*(who|what|completes?|fills?|does?|responsible)|form\s*215|^215/i.test(questionLower)
+      if (is215Question) {
+        // For 215 questions, prioritize daily-tactics-planning - make it the primary source
+        const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
+        if (dailyTacticsArticle) {
+          const articleContext = `---\nArticle: ${dailyTacticsArticle.title}\nCategory: ${dailyTacticsArticle.category}\nSummary: ${dailyTacticsArticle.summary}\n\nContent:\n${dailyTacticsArticle.content.substring(0, 4000)}\n---`
+          // Put daily-tactics-planning first in context and sources
+          relevantContext = relevantContext ? `${articleContext}\n\n${relevantContext}` : articleContext
+          // Remove any existing daily-tactics-planning and add it first
+          responseSources = responseSources.filter(s => s.id !== "daily-tactics-planning")
+          responseSources.unshift({
+            id: "daily-tactics-planning",
+            title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
+          })
+        }
+      }
       
       const response = await fetch("/api/ai/chat", {
         method: "POST",
@@ -429,6 +489,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
       }
 
       let accumulatedContent = ""
+      let ttsStarted = false // Track if TTS has been initiated
 
       while (true) {
         const { done, value } = await reader.read()
@@ -443,7 +504,9 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             if (data === "[DONE]") {
               // Final update before ending
               if (accumulatedContent.trim()) {
-                const finalActions = extractActions(accumulatedContent)
+                // Ensure sources are set correctly (daily-tactics-planning should be first for 215 questions)
+                const finalSources = responseSources.length > 0 ? [...responseSources] : undefined
+                console.log("[AskScreen] Final sources for message:", finalSources)
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -451,19 +514,20 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           ...msg,
                           content: accumulatedContent,
                           fullContent: accumulatedContent,
-                          sources: responseSources.length > 0 ? responseSources : undefined,
-                          actions: finalActions.length > 0 ? finalActions : undefined,
+                          sources: finalSources,
                         }
                       : msg
                   )
                 )
               }
               setIsLoading(false)
-              // Play TTS after streaming completes
+              // Start TTS with full response after streaming completes
               if (accumulatedContent.trim()) {
-                setTimeout(async () => {
-                  await playAudioResponse(accumulatedContent, assistantMessageId)
-                }, 300)
+                console.log("[AskScreen] Streaming complete, starting TTS for message:", assistantMessageId)
+                // Small delay to ensure state is updated
+                setTimeout(() => {
+                  playAudioResponse(accumulatedContent, assistantMessageId)
+                }, 100)
               }
               return
             }
@@ -471,12 +535,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
             try {
               const json = JSON.parse(data)
               const content = json.content
-              if (content) {
-                accumulatedContent += content
-                // Extract actions from content
-                const extractedActions = extractActions(accumulatedContent)
-                
+              if (content && typeof content === 'string') {
+                // Fix: Trim leading whitespace/punctuation if this is the first chunk and it starts incorrectly
+                let contentToAdd = content
+                if (accumulatedContent === "" && /^[\s,\.;:]/.test(content)) {
+                  // If first chunk starts with punctuation, it might be missing the first word
+                  // This is likely an AI generation issue, but we'll trim leading punctuation
+                  contentToAdd = content.replace(/^[\s,\.;:]+/, '')
+                  console.warn("[Stream] First chunk started with punctuation, trimmed:", content.substring(0, 20))
+                }
+                accumulatedContent += contentToAdd
                 // Update the assistant message with accumulated content (ensure it's always visible)
+                // Use a copy of responseSources to ensure it doesn't get mutated
+                const currentSources = responseSources.length > 0 ? [...responseSources] : undefined
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -484,12 +555,25 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                           ...msg, 
                           content: accumulatedContent, // Always show full content as it streams
                           fullContent: accumulatedContent,
-                          sources: responseSources.length > 0 ? responseSources : undefined,
-                          actions: extractedActions.length > 0 ? extractedActions : undefined,
+                          sources: currentSources,
                         }
                       : msg
                   )
                 )
+
+                // Start TTS immediately when we have ~50 words or first complete sentence
+                // But wait for streaming to complete to ensure full response is played
+                if (!ttsStarted && accumulatedContent.trim()) {
+                  const wordCount = accumulatedContent.split(/\s+/).length
+                  const hasCompleteSentence = /[.!?]\s/.test(accumulatedContent)
+                  
+                  // Start TTS if we have at least 50 words OR a complete sentence with 20+ words
+                  // But mark as started so we don't trigger multiple times during streaming
+                  if (wordCount >= 50 || (hasCompleteSentence && wordCount >= 20)) {
+                    ttsStarted = true
+                    // Don't start TTS yet - wait for full response to ensure complete playback
+                  }
+                }
               }
             } catch (e) {
               // Ignore parse errors for comments or invalid JSON
@@ -501,10 +585,7 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
 
       setIsLoading(false)
       
-      // Extract actions from final content and update message
-      const finalActions = extractActions(accumulatedContent)
-      
-      // Update message with full content and actions
+      // Update message with full content
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
@@ -512,17 +593,19 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                 ...msg, 
                 content: accumulatedContent, // Show full content in chat
                 fullContent: accumulatedContent,
-                actions: finalActions.length > 0 ? finalActions : undefined,
+                sources: responseSources.length > 0 ? responseSources : undefined,
               }
             : msg
         )
       )
       
-      // Play TTS for final response after streaming completes (short version first)
+      // Start TTS with full response after streaming completes
       if (accumulatedContent.trim()) {
-        setTimeout(async () => {
-          await playAudioResponse(accumulatedContent, assistantMessageId)
-        }, 300)
+        console.log("[AskScreen] Streaming complete (fallback), starting TTS for message:", assistantMessageId)
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          playAudioResponse(accumulatedContent, assistantMessageId)
+        }, 100)
       }
     } catch (error) {
       console.error("Ask AI error:", error)
@@ -581,77 +664,128 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
           </div>
         </div>
 
-        {/* Input bar */}
+        {/* Input bar - Google AI style */}
         <div className="p-4 pb-6">
-          <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
-            {/* Voice input button */}
-            {isVoiceSupported ? (
-              <button
-                onClick={() => {
-                  console.log("[AskScreen] Mic button clicked, isListening:", isListening)
-                  if (isListening) {
-                    stopListening()
-                    setIsVoiceActive(false)
-                    resetVoice()
-                  } else {
-                    setIsVoiceActive(true)
-                    console.log("[AskScreen] Starting voice recognition...")
-                    startListening()
+          {/* Main input container */}
+          <div 
+            className={cn(
+              "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
+              "shadow-sm hover:shadow-md",
+              (input.trim() || isListening) 
+                ? "border-primary/30 shadow-primary/5" 
+                : "border-border",
+            )}
+          >
+            {/* Textarea container */}
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  // Auto-expand textarea
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                }}
+                onKeyDown={handleKeyDown}
+                onFocus={(e) => {
+                  // Expand to minimum focused height
+                  if (e.target.scrollHeight < 56) {
+                    e.target.style.height = '56px'
                   }
                 }}
+                onBlur={(e) => {
+                  // Collapse if empty
+                  if (!input.trim()) {
+                    e.target.style.height = 'auto'
+                  }
+                }}
+                placeholder={isListening ? "Listening..." : "Ask anything about Red Cross doctrine..."}
+                rows={1}
+                autoComplete="off"
                 className={cn(
-                  "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                  "flex-1 px-5 py-4 bg-transparent resize-none",
+                  "text-base text-foreground placeholder:text-muted-foreground/70",
+                  "focus:outline-none focus:placeholder:text-muted-foreground/50",
+                  "min-h-[56px] max-h-[200px] leading-relaxed",
                   "transition-all duration-200",
-                  isListening
-                    ? "bg-primary text-primary-foreground animate-pulse"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                  isListening && "text-primary",
                 )}
-                title={isListening ? "Stop listening" : "Start voice input"}
-              >
-                {isListening ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
-              </button>
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
-                <Mic className="w-4 h-4 text-muted-foreground" />
+                disabled={isListening}
+              />
+              
+              {/* Smart action button - voice/send toggle */}
+              <div className="flex items-end pr-3 pb-3 self-end">
+                {/* Single smart button: Voice when empty, Send when has text, Stop when listening */}
+                <button
+                  onClick={() => {
+                    if (isListening) {
+                      // Stop listening
+                      stopListening()
+                      setIsVoiceActive(false)
+                    } else if (input.trim()) {
+                      // Send message
+                      handleSend()
+                    } else if (isVoiceSupported) {
+                      // Start voice input
+                      setIsVoiceActive(true)
+                      startListening()
+                    }
+                  }}
+                  className={cn(
+                    "w-9 h-9 rounded-full flex items-center justify-center",
+                    "transition-all duration-200",
+                    isListening
+                      ? "bg-primary text-primary-foreground"
+                      : input.trim()
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/80 text-foreground hover:bg-muted",
+                  )}
+                  title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
+                >
+                  {isListening ? (
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                  ) : input.trim() ? (
+                    <ArrowUp className="w-4 h-4" />
+                  ) : (
+                    <AudioLines className="w-4 h-4" />
+                  )}
+                </button>
               </div>
-            )}
-            {/* Voice transcript display */}
+            </div>
+            
+            {/* Voice transcript - floating below input */}
             {(isListening || transcript || interimTranscript) && (
-              <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
-                {transcript || interimTranscript || "Listening..."}
+              <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
+                <AudioLines className="w-4 h-4 animate-pulse" />
+                <span>{transcript || interimTranscript || "Listening..."}</span>
               </div>
             )}
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isListening ? "Listening..." : "Ask a question..."}
-              rows={1}
-              autoComplete="off"
-              className={cn(
-                "flex-1 px-2 py-2 bg-transparent resize-none",
-                "text-sm text-foreground placeholder:text-muted-foreground",
-                "focus:outline-none",
-                "max-h-24",
-                isListening && "opacity-50",
-              )}
-              disabled={isListening}
-            />
+          </div>
+          
+          {/* Voice toggle - below input */}
+          <div className="flex justify-center pt-3">
             <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isListening}
+              onClick={() => {
+                const newTtsEnabled = !ttsEnabled
+                setTtsEnabled(newTtsEnabled)
+                if (!newTtsEnabled && audioRef.current) {
+                  audioRef.current.pause()
+                  audioRef.current.currentTime = 0
+                  setAudioUrl(null)
+                  setIsPlayingAudio(false)
+                }
+              }}
               className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                "px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5",
                 "transition-all duration-200",
-                input.trim() && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                ttsEnabled
+                  ? "text-primary"
+                  : "text-muted-foreground",
               )}
             >
-              <ArrowUp className="w-4 h-4" />
+              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              <span>{ttsEnabled ? "Voice on" : "Voice off"}</span>
             </button>
           </div>
         </div>
@@ -662,8 +796,41 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
   // Conversation view
   return (
     <div className="flex flex-col h-full min-h-[calc(100dvh-5rem)]">
+      {/* Header with voice toggle */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+        <span className="text-xs text-muted-foreground">Red Cross Doctrine Assistant</span>
+        <button
+          onClick={() => {
+            const newTtsEnabled = !ttsEnabled
+            setTtsEnabled(newTtsEnabled)
+            if (!newTtsEnabled && audioRef.current) {
+              audioRef.current.pause()
+              audioRef.current.currentTime = 0
+              setAudioUrl(null)
+              setIsPlayingAudio(false)
+            }
+          }}
+          className={cn(
+            "px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5",
+            "transition-all duration-200",
+            ttsEnabled
+              ? "bg-primary/10 text-primary"
+              : "bg-muted/50 text-muted-foreground",
+          )}
+        >
+          {isPlayingAudio ? (
+            <AudioLines className="w-3.5 h-3.5 animate-pulse" />
+          ) : ttsEnabled ? (
+            <Volume2 className="w-3.5 h-3.5" />
+          ) : (
+            <VolumeX className="w-3.5 h-3.5" />
+          )}
+          <span>{ttsEnabled ? "Voice" : "Muted"}</span>
+        </button>
+      </div>
+      
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-6 touch-scroll">
+      <div className="flex-1 overflow-y-auto px-5 py-4 touch-scroll">
         <div className="space-y-6">
           {messages.map((message) => (
             <div key={message.id}>
@@ -680,81 +847,42 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
                       <Sparkles className="w-3.5 h-3.5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      {/* Show full content if available, otherwise show content */}
+                      {/* Show full content */}
                       <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                         {message.fullContent || message.content}
                       </p>
                       
-                      {/* "Hear more" button if content was truncated */}
-                      {message.hasMore && message.fullContent && (
-                        <button
-                          onClick={() => playMoreAudio(message.id, message.fullContent!)}
-                          className={cn(
-                            "mt-3 px-4 py-2 rounded-lg text-sm",
-                            "bg-primary/10 text-primary border border-primary/20",
-                            "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                            "flex items-center gap-2"
-                          )}
-                        >
-                          <Mic className="w-4 h-4" />
-                          Hear more
-                        </button>
-                      )}
-                      
-                      {/* Action buttons */}
-                      {message.actions && message.actions.length > 0 && (
-                        <div className="flex flex-col gap-2 mt-4">
-                          <span className="text-xs text-muted-foreground font-medium">Suggested actions:</span>
-                          <div className="flex flex-col gap-2">
-                            {message.actions.map((action, idx) => (
-                              <div key={idx} className="flex gap-2">
-                                <button
-                                  onClick={() => handleActionClick(action, false)}
-                                  className={cn(
-                                    "flex-1 px-3 py-2 rounded-lg text-left text-sm",
-                                    "bg-primary/10 text-primary border border-primary/20",
-                                    "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                  )}
-                                >
-                                  {action}
-                                </button>
-                                {isVoiceSupported && (
-                                  <button
-                                    onClick={() => handleActionClick(action, true)}
-                                    className={cn(
-                                      "w-10 h-10 rounded-lg flex items-center justify-center",
-                                      "bg-primary/10 text-primary border border-primary/20",
-                                      "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                    )}
-                                    title="Say this with voice"
-                                  >
-                                    <Mic className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
                       {/* Source links */}
                       {message.sources && message.sources.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <span className="text-[10px] text-muted-foreground">Sources:</span>
-                          {message.sources.map((source) => (
-                            <button
-                              key={source.id}
-                              onClick={() => {
-                                if (onNavigate && source.id) {
-                                  onNavigate("doctrine-detail", source.id)
-                                }
-                              }}
-                              className="text-[10px] px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-left max-w-[200px] truncate"
-                              title={source.title}
-                            >
-                              {source.title}
-                            </button>
-                          ))}
+                        <div className="flex flex-col gap-2 mt-4">
+                          <span className="text-xs text-muted-foreground font-medium">Source content:</span>
+                          <div className="flex flex-col gap-2">
+                            {message.sources.map((source) => (
+                              <button
+                                key={source.id}
+                                onClick={() => {
+                                  console.log("[AskScreen] Source clicked:", source.id, source.title)
+                                  if (onNavigate && source.id) {
+                                    console.log("[AskScreen] Navigating to doctrine-detail with id:", source.id)
+                                    // Fix: onNavigate signature is (screen, disasterType?, doctrineId?, group?)
+                                    onNavigate("doctrine-detail", undefined, source.id)
+                                  } else {
+                                    console.warn("[AskScreen] Cannot navigate - onNavigate:", !!onNavigate, "source.id:", source.id)
+                                  }
+                                }}
+                                className={cn(
+                                  "px-3 py-2 rounded-lg text-left text-sm",
+                                  "bg-primary/10 text-primary border border-primary/20",
+                                  "hover:bg-primary/20 active:scale-[0.98] transition-all",
+                                  "flex items-center gap-2 cursor-pointer"
+                                )}
+                                title={source.title}
+                              >
+                                <BookOpen className="w-4 h-4 flex-shrink-0" />
+                                <span className="truncate">{source.title}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -778,95 +906,143 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
         </div>
       </div>
 
-      {/* Hidden audio element for TTS playback */}
-      {audioUrl && (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          onPlay={() => setIsPlayingAudio(true)}
-          onEnded={() => {
-            setIsPlayingAudio(false)
+      {/* Hidden audio element for TTS playback - always render to ensure it's available */}
+      <audio
+        ref={audioRef}
+        src={audioUrl || undefined}
+        onPlay={() => {
+          console.log("[AskScreen] Audio play event")
+          setIsPlayingAudio(true)
+        }}
+        onEnded={() => {
+          console.log("[AskScreen] Audio ended event")
+          setIsPlayingAudio(false)
+          // Don't clear audioUrl immediately - keep it for potential replay
+          setTimeout(() => {
             setAudioUrl(null)
-          }}
-          onError={() => {
-            setIsPlayingAudio(false)
-            setAudioUrl(null)
-          }}
-        />
-      )}
+          }, 100)
+        }}
+        onError={(e) => {
+          const audio = e.currentTarget as HTMLAudioElement
+          const error = audio.error
+          console.error("[AskScreen] Audio playback error:", {
+            error,
+            code: error?.code,
+            message: error?.message,
+            networkState: audio.networkState,
+            readyState: audio.readyState,
+            src: audio.src
+          })
+          setIsPlayingAudio(false)
+          // Clear audioUrl on error to allow retry with new URL
+          setAudioUrl(null)
+        }}
+        onLoadStart={() => console.log("[AskScreen] Audio load start")}
+        onLoadedData={() => console.log("[AskScreen] Audio loaded data")}
+        onCanPlay={() => console.log("[AskScreen] Audio can play")}
+        preload="auto"
+      />
 
-      {/* Input bar - fixed at bottom */}
-      <div className="p-4 pb-6 border-t border-border bg-background">
-        <div className="flex items-end gap-2 p-2 rounded-2xl bg-card border border-border">
-          {/* Voice input button */}
-          {isVoiceSupported ? (
-            <button
-              onClick={() => {
-                console.log("[AskScreen] Mic button clicked (conversation), isListening:", isListening)
-                if (isListening) {
-                  stopListening()
-                  setIsVoiceActive(false)
-                  resetVoice()
-                } else {
-                  setIsVoiceActive(true)
-                  console.log("[AskScreen] Starting voice recognition (conversation)...")
-                  startListening()
+      {/* Input bar - Google AI style */}
+      <div className="p-4 pb-safe bg-background">
+        {/* Main input container */}
+        <div 
+          className={cn(
+            "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
+            "shadow-sm",
+            (input.trim() || isListening) 
+              ? "border-primary/30 shadow-md shadow-primary/5" 
+              : "border-border hover:shadow-md",
+          )}
+        >
+          {/* Textarea container */}
+          <div className="flex items-end">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value)
+                // Auto-expand textarea
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={(e) => {
+                if (e.target.scrollHeight < 48) {
+                  e.target.style.height = '48px'
                 }
               }}
+              onBlur={(e) => {
+                if (!input.trim()) {
+                  e.target.style.height = 'auto'
+                }
+              }}
+              placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
+              rows={1}
+              autoComplete="off"
               className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                "flex-1 px-5 py-3.5 bg-transparent resize-none",
+                "text-base text-foreground placeholder:text-muted-foreground/70",
+                "focus:outline-none",
+                "min-h-[48px] max-h-[160px] leading-relaxed",
                 "transition-all duration-200",
-                isListening
-                  ? "bg-primary text-primary-foreground animate-pulse"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+                isListening && "text-primary",
               )}
-              title={isListening ? "Stop listening" : "Start voice input"}
-            >
-              {isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
-              )}
-            </button>
-          ) : (
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50" title="Voice input not supported">
-              <Mic className="w-4 h-4 text-muted-foreground" />
+              disabled={isListening}
+            />
+            
+            {/* Smart action button - bottom aligned */}
+            <div className="flex items-end pr-3 pb-3 self-end">
+              {/* Single button: Voice when empty, Send when has text, Stop when listening */}
+              <button
+                onClick={() => {
+                  if (isListening) {
+                    // Stop listening
+                    stopListening()
+                    setIsVoiceActive(false)
+                  } else if (input.trim()) {
+                    // Send message
+                    handleSend()
+                  } else if (isVoiceSupported) {
+                    // Start voice input
+                    setIsVoiceActive(true)
+                    startListening()
+                  }
+                }}
+                disabled={isLoading}
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center",
+                  "transition-all duration-200",
+                  isLoading
+                    ? "bg-muted text-muted-foreground"
+                    : isListening
+                      ? "bg-primary text-primary-foreground"
+                      : input.trim()
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/80 text-foreground hover:bg-muted",
+                )}
+                title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isListening ? (
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                ) : input.trim() ? (
+                  <ArrowUp className="w-4 h-4" />
+                ) : (
+                  <AudioLines className="w-4 h-4" />
+                )}
+              </button>
             </div>
-          )}
-          {/* Voice transcript display */}
+          </div>
+          
+          {/* Voice transcript - floating below input */}
           {(isListening || transcript || interimTranscript) && (
-            <div className="flex-1 px-2 py-2 text-xs text-muted-foreground italic">
-              {transcript || interimTranscript || "Listening..."}
+            <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
+              <AudioLines className="w-4 h-4 animate-pulse" />
+              <span>{transcript || interimTranscript || "Listening..."}</span>
             </div>
           )}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
-            rows={1}
-            autoComplete="off"
-            className={cn(
-              "flex-1 px-2 py-2 bg-transparent resize-none",
-              "text-sm text-foreground placeholder:text-muted-foreground",
-              "focus:outline-none",
-              "max-h-24",
-              isListening && "opacity-50",
-            )}
-            disabled={isListening}
-          />
-          <button
-            onClick={() => handleSend()}
-            disabled={!input.trim() || isLoading || isListening}
-            className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-              "transition-all duration-200",
-              input.trim() && !isLoading && !isListening ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-          >
-            <ArrowUp className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>

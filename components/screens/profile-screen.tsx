@@ -94,6 +94,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       {/* Sign Out */}
       <section className="px-5 pb-8">
         <button
+          onClick={() => onNavigate("login")}
           className={cn(
             "w-full flex items-center justify-center gap-2 h-12 rounded-xl",
             "border border-border",
