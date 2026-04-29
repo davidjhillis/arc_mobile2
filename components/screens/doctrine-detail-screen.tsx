@@ -1062,27 +1062,37 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const AIMarkdown = ({ text }: { text: string }) => {
     const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/)
     return (
-      <div className="space-y-3 text-[15px] leading-relaxed text-foreground">
+      <div className="prose-arc-ai">
         {blocks.map((block, bi) => {
           const lines = block.split("\n").filter((l) => l.length > 0)
           if (lines.length === 0) return null
-          // Heading (## / ###) — render as a normal-cased subheading.
+          // Heading (## / ###)
           if (/^#{2,3}\s+/.test(lines[0]) && lines.length === 1) {
+            const level = lines[0].startsWith("###") ? 3 : 2
             const text = lines[0].replace(/^#{2,3}\s+/, "")
-            return (
-              <h4 key={bi} className="text-[15px] font-semibold text-foreground pt-1">
-                {text}
-              </h4>
+            return level === 2 ? (
+              <h3 key={bi}>{text}</h3>
+            ) : (
+              <h4 key={bi}>{text}</h4>
             )
           }
           // List
           if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
             return (
-              <ul key={bi} className="list-disc pl-5 space-y-1.5">
+              <ul key={bi}>
                 {lines.map((l, li) => (
                   <li key={li}>{renderInlineSpans(l.replace(/^\s*[-*]\s+/, ""), `${bi}-${li}`)}</li>
                 ))}
               </ul>
+            )
+          }
+          if (lines.every((l) => /^\s*\d+\.\s+/.test(l))) {
+            return (
+              <ol key={bi}>
+                {lines.map((l, li) => (
+                  <li key={li}>{renderInlineSpans(l.replace(/^\s*\d+\.\s+/, ""), `${bi}-${li}`)}</li>
+                ))}
+              </ol>
             )
           }
           // Paragraph

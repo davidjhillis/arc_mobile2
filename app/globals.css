@@ -467,3 +467,48 @@
   letter-spacing: 0.05em;
   color: var(--muted-foreground);
 }
+
+/*
+  Smaller prose variant for AI panels (Summary, Ask answer).
+  Same family as .prose-arc but tightened to feel at home inside a card,
+  not a full article view.
+*/
+.prose-arc-ai {
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.prose-arc-ai > * + * { margin-top: 0.75rem; }
+.prose-arc-ai p { margin: 0; color: oklch(from var(--foreground) l c h / 0.92); }
+.prose-arc-ai h3 {
+  font-size: 1rem;
+  line-height: 1.35;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+  color: var(--foreground);
+}
+.prose-arc-ai h4 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+  color: var(--foreground);
+}
+.prose-arc-ai ul, .prose-arc-ai ol {
+  padding-left: 1.25rem;
+  margin: 0;
+}
+.prose-arc-ai ul { list-style: disc; }
+.prose-arc-ai ol { list-style: decimal; }
+.prose-arc-ai li { margin: 0.35rem 0; }
+.prose-arc-ai li::marker { color: var(--muted-foreground); }
+.prose-arc-ai strong { font-weight: 600; color: var(--foreground); }
+.prose-arc-ai em { font-style: italic; }
+.prose-arc-ai code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--muted);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+}
