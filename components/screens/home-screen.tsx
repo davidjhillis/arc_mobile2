@@ -377,7 +377,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                   )}
                   style={{ scrollSnapAlign: "start" }}
                 >
-                  <p className="text-sm font-semibold text-foreground leading-snug mb-1">{doc.title}</p>
+                  <p className="text-sm font-semibold text-foreground leading-snug mb-1 line-clamp-3 min-h-[3.75rem]">
+                    {doc.title}
+                  </p>
                   <p
                     className={cn(
                       "text-xs text-muted-foreground",
