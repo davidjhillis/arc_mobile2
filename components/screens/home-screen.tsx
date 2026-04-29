@@ -13,9 +13,6 @@ import {
   HardHat,
   ChevronRight,
   Clock,
-  Sparkles,
-  X,
-  ArrowDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -58,7 +55,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR)
   const [readIds, setReadIds] = useState<string[]>([])
   const [lastVisit, setLastVisit] = useState<Date | null>(null)
-  const [showWelcome, setShowWelcome] = useState(false)
 
   useEffect(() => {
     try {
@@ -79,18 +75,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       if (rawVisit) setLastVisit(new Date(rawVisit))
       localStorage.setItem("arc_last_visit", new Date().toISOString())
 
-      // First-run welcome — show once until dismissed
-      const onboarded = localStorage.getItem("arc_onboarded")
-      if (!onboarded) setShowWelcome(true)
     } catch {}
   }, [])
-
-  const dismissWelcome = () => {
-    setShowWelcome(false)
-    try {
-      localStorage.setItem("arc_onboarded", "1")
-    } catch {}
-  }
 
   const continueReading = useMemo(() => {
     if (readIds.length === 0) return []
@@ -126,69 +112,34 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   return (
     <div className="flex flex-col min-h-full bg-background pb-6">
-      {/* Hero — compact, one line */}
-      <header className="flex items-center justify-between gap-3 px-5 pt-12 pb-5">
+      {/* Hero — page title is the function; greeting demoted to subtitle */}
+      <header className="flex items-end justify-between gap-3 px-5 pt-12 pb-4">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">Welcome back</p>
-          <h1 className="text-[28px] leading-tight font-bold text-foreground tracking-tight truncate">
-            {profile.name}
+          <h1 className="text-[28px] leading-tight font-bold text-foreground tracking-tight">
+            Doctrine
           </h1>
+          <p className="text-sm text-muted-foreground mt-0.5 truncate">
+            Welcome back, {profile.name}
+          </p>
         </div>
         <button
           onClick={() => onNavigate("profile")}
           aria-label="Open profile"
-          className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-card shadow-sm active:scale-95 transition shrink-0"
+          className="w-11 h-11 rounded-full overflow-hidden ring-2 ring-card shadow-sm active:scale-95 transition shrink-0"
         >
           <img src={avatarUrl} alt={profile.fullName} className="w-full h-full object-cover" />
         </button>
       </header>
 
-      {/* First-run welcome — disappears after dismiss */}
-      {showWelcome && (
-        <div className="px-5 mb-4">
-          <div className="relative rounded-2xl bg-interactive-soft/40 border border-interactive/15 p-4 pr-10">
-            <button
-              onClick={dismissWelcome}
-              aria-label="Dismiss welcome"
-              className="absolute top-2 right-2 w-8 h-8 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground active:scale-95 transition"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <p className="text-sm font-semibold text-foreground mb-1.5 inline-flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-interactive" aria-hidden />
-              Welcome to your field assistant
-            </p>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-3">
-              Find Red Cross procedures fast. Ask a question or browse by your assignment area —
-              everything works offline once you've opened it.
-            </p>
-            <ul className="space-y-1.5 text-[13px] text-foreground">
-              <li className="flex items-start gap-2">
-                <Search className="w-3.5 h-3.5 mt-0.5 text-interactive shrink-0" aria-hidden />
-                <span>
-                  Tap the search bar to ask things like <em className="text-foreground/80">"Who completes a Form 215?"</em>
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <ArrowDown className="w-3.5 h-3.5 mt-0.5 text-interactive shrink-0" aria-hidden />
-                <span>
-                  Or pick an assignment below to read the related task sheets and standards.
-                </span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Search bar */}
+      {/* Search bar — placeholder shows by example what's possible */}
       <div className="px-5">
         <button
           onClick={() => onNavigate("ask")}
           className="w-full flex items-center gap-3 h-12 px-4 rounded-full bg-muted active:scale-[0.99] hover:bg-muted/70 transition"
         >
           <Search className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
-          <span className="flex-1 text-left text-muted-foreground text-[15px]">
-            Search doctrine or ask a question
+          <span className="flex-1 text-left text-muted-foreground text-[15px] truncate">
+            Ask a question or search procedures
           </span>
         </button>
       </div>
