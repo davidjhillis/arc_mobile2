@@ -13,6 +13,7 @@ import {
   HardHat,
   ChevronRight,
   Clock,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -100,15 +101,29 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const isMyArea = (label: string) =>
     profile.serviceAreas.some((sa) => label.toLowerCase().includes(sa.toLowerCase()))
 
-  // Sort: user's areas first, then alphabetical
-  const orderedAssignments = useMemo(() => {
-    return [...assignments].sort((a, b) => {
-      const ax = isMyArea(a.label) ? 0 : 1
-      const bx = isMyArea(b.label) ? 0 : 1
-      if (ax !== bx) return ax - bx
-      return a.label.localeCompare(b.label)
-    })
-  }, [profile.serviceAreas])
+  const myAssignments = useMemo(
+    () => assignments.filter((a) => isMyArea(a.label)),
+    [profile.serviceAreas]
+  )
+  const otherAssignments = useMemo(
+    () => assignments.filter((a) => !isMyArea(a.label)),
+    [profile.serviceAreas]
+  )
+
+  // Recommended for you — pick one unread doc that matches the user's
+  // service areas, preferring task-sheets (the actionable kind).
+  const recommended = useMemo(() => {
+    const readSet = new Set(readIds)
+    const candidates = Object.values(massCareContent)
+      .filter((d) => !readSet.has(d.id))
+      .filter((d) => profile.serviceAreas.some((sa) => d.category.toLowerCase().includes(sa.toLowerCase())))
+      .sort((a, b) => {
+        const ax = a.type === "task-sheet" ? 0 : 1
+        const bx = b.type === "task-sheet" ? 0 : 1
+        return ax - bx
+      })
+    return candidates[0] ?? null
+  }, [readIds, profile.serviceAreas])
 
   return (
     <div className="flex flex-col min-h-full bg-background pb-6">
@@ -178,43 +193,81 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </section>
       )}
 
-      {/* Assignments — single grid, "Your area" mark on the user's */}
+      {/* Recommended for you — one AI-picked unread doc that matches your areas */}
+      {recommended && (
+        <section className="px-5 mt-6" aria-labelledby="recommended-heading">
+          <h2 id="recommended-heading" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Recommended for you
+          </h2>
+          <button
+            onClick={() => onNavigate("doctrine-detail", undefined, recommended.id)}
+            className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:border-interactive/40 active:scale-[0.99] transition"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-interactive inline-flex items-center gap-1 mb-1.5">
+              <Sparkles className="w-2.5 h-2.5" aria-hidden /> Picked from your areas
+            </p>
+            <p className="text-sm font-semibold text-foreground leading-snug mb-1">
+              {recommended.title}
+            </p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{recommended.summary}</p>
+            <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
+              <span>{recommended.category} · {recommended.readTime}</span>
+              <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
+                Read <ChevronRight className="w-3 h-3" aria-hidden />
+              </span>
+            </div>
+          </button>
+        </section>
+      )}
+
+      {/* Your assignments */}
+      {myAssignments.length > 0 && (
+        <section className="px-5 mt-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Your assignments
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
+            {myAssignments.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onNavigate("doctrine", item.id)}
+                  className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-interactive/30 hover:border-interactive/50 active:scale-[0.98] transition"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-interactive/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4 text-interactive" />
+                  </div>
+                  <p className="text-[13px] font-semibold text-foreground leading-snug min-w-0 truncate">
+                    {item.label}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* All other assignments */}
       <section className="px-5 mt-6">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Browse by assignment
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          {myAssignments.length > 0 ? "All assignments" : "Browse by assignment"}
         </h2>
         <div className="grid grid-cols-2 gap-2">
-          {orderedAssignments.map((item) => {
+          {otherAssignments.map((item) => {
             const Icon = item.icon
-            const mine = isMyArea(item.label)
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate("doctrine", item.id)}
-                className={cn(
-                  "relative flex items-center gap-2.5 px-3 py-3 rounded-xl text-left transition active:scale-[0.98]",
-                  mine
-                    ? "bg-card border border-interactive/30 hover:border-interactive/50"
-                    : "bg-card border border-border hover:border-interactive/30"
-                )}
+                className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-border hover:border-interactive/30 active:scale-[0.98] transition"
               >
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                    mine ? "bg-interactive/10" : "bg-muted"
-                  )}
-                >
-                  <Icon className={cn("w-4 h-4", mine ? "text-interactive" : "text-foreground")} />
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4 text-foreground" />
                 </div>
                 <p className="text-[13px] font-semibold text-foreground leading-snug min-w-0 truncate">
                   {item.label}
                 </p>
-                {mine && (
-                  <span
-                    className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-interactive"
-                    aria-label="Your area"
-                  />
-                )}
               </button>
             )
           })}
