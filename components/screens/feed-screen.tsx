@@ -205,6 +205,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set())
   const [readItems, setReadItems] = useState<Set<string>>(new Set())
   const [userServiceAreas, setUserServiceAreas] = useState<string[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // Pull-to-refresh state
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -292,6 +293,46 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
     })
     onNavigate("doctrine-detail", undefined, id)
   }
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((curr) => (curr === id ? null : id))
+  }
+
+  // Build a lightweight preview from the underlying doctrine content.
+  // Pulls the first short paragraph plus up to 3 bullets from any
+  // "What to do" section so the user gets a real glimpse without us
+  // having to fetch the full article.
+  const buildPreview = useCallback((id: string): { lead: string; bullets: string[] } => {
+    const doc = massCareContent[id]
+    if (!doc) return { lead: "", bullets: [] }
+    const lines = doc.content.split("\n").map((l) => l.trim())
+
+    // Lead: first non-empty paragraph that isn't a heading or bullet
+    let lead = ""
+    for (const line of lines) {
+      if (!line) continue
+      if (/^#{1,6}\s/.test(line)) continue
+      if (/^[-*]\s/.test(line)) continue
+      lead = line.replace(/\*\*(.+?)\*\*/g, "$1")
+      break
+    }
+
+    // Bullets: first list we hit, up to 3
+    const bullets: string[] = []
+    let inList = false
+    for (const line of lines) {
+      const isBullet = /^[-*]\s+/.test(line)
+      if (isBullet) {
+        inList = true
+        bullets.push(line.replace(/^[-*]\s+/, "").replace(/\*\*(.+?)\*\*/g, "$1"))
+        if (bullets.length >= 3) break
+      } else if (inList && !line) {
+        if (bullets.length > 0) break
+      }
+    }
+
+    return { lead, bullets }
+  }, [])
 
   // ---- Personalization match ("Your roles") ----
   // We synthesize role match from the user's serviceAreas vs doc.section label.
@@ -430,16 +471,29 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
     const isDownloaded = downloadStates[item.id] === "downloaded"
     const isDownloading = downloadStates[item.id] === "downloading"
     const personal = matchesUserRoles(item)
+    const isExpanded = expandedId === item.id
+    const preview = isExpanded ? buildPreview(item.id) : null
 
     return (
-      <button
-        onClick={() => openItem(item.id)}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => toggleExpand(item.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            toggleExpand(item.id)
+          }
+        }}
         className={cn(
-          "w-full text-left rounded-2xl border transition",
-          "active:scale-[0.99] hover:border-interactive/40",
-          isRead
-            ? "bg-card/70 border-border/70"
-            : "bg-card border-border shadow-sm"
+          "w-full text-left rounded-2xl border transition cursor-pointer",
+          "hover:border-interactive/40",
+          !isExpanded && "active:scale-[0.99]",
+          isExpanded
+            ? "bg-card border-interactive/40 shadow-md"
+            : isRead
+              ? "bg-card/70 border-border/70"
+              : "bg-card border-border shadow-sm"
         )}
       >
         <div className="p-4">
@@ -468,7 +522,9 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             </p>
           )}
 
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{item.summary}</p>
+          <p className={cn("text-xs text-muted-foreground leading-relaxed mb-3", !isExpanded && "line-clamp-2")}>
+            {item.summary}
+          </p>
 
           {/* Bottom row: badges on the left, actions on the right */}
           <div className="flex items-center justify-between gap-2">
@@ -485,7 +541,10 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button
-                onClick={(e) => handleDownload(item.id, e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload(item.id, e)
+                }}
                 disabled={isDownloading || isDownloaded}
                 aria-label={isDownloaded ? "Downloaded" : "Save offline"}
                 className={cn(
@@ -506,7 +565,10 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                 )}
               </button>
               <button
-                onClick={(e) => handleSave(item.id, e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSave(item.id, e)
+                }}
                 aria-label={isSaved ? "Remove bookmark" : "Bookmark"}
                 aria-pressed={isSaved}
                 className={cn(
@@ -519,7 +581,44 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             </div>
           </div>
         </div>
-      </button>
+
+        {/* Inline expanded preview */}
+        {isExpanded && preview && (
+          <div className="px-4 pb-4 border-t border-border/60 pt-4 mt-1 space-y-3">
+            {preview.lead && (
+              <p className="text-[14px] leading-relaxed text-foreground/90">{preview.lead}</p>
+            )}
+            {preview.bullets.length > 0 && (
+              <ul className="list-disc pl-5 space-y-1.5 text-[13px] text-foreground/90">
+                {preview.bullets.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openItem(item.id)
+                }}
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-foreground text-background text-sm font-semibold active:scale-95 transition"
+              >
+                Open article
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setExpandedId(null)
+                }}
+                className="inline-flex items-center h-10 px-3 rounded-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition"
+              >
+                Collapse
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     )
   }
 
