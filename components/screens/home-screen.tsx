@@ -11,7 +11,6 @@ import {
   Handshake,
   Briefcase,
   HardHat,
-  ChevronLeft,
   ChevronRight,
   Clock,
 } from "lucide-react"
@@ -193,6 +192,66 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     }
   }
 
+  // Click-and-drag horizontal scrolling for desktop (mouse can't natively
+  // scroll horizontally). Touch users keep the native swipe behavior.
+  const dragState = useRef({ active: false, startX: 0, startScroll: 0, moved: false })
+
+  const onCarouselMouseDown = (e: React.MouseEvent) => {
+    const el = recCarouselRef.current
+    if (!el) return
+    dragState.current = {
+      active: true,
+      startX: e.clientX,
+      startScroll: el.scrollLeft,
+      moved: false,
+    }
+    el.style.scrollSnapType = "none" // disable snap mid-drag for smoothness
+  }
+
+  const onCarouselMouseMove = (e: React.MouseEvent) => {
+    const el = recCarouselRef.current
+    const s = dragState.current
+    if (!s.active || !el) return
+    const dx = e.clientX - s.startX
+    if (Math.abs(dx) > 4) s.moved = true
+    el.scrollLeft = s.startScroll - dx
+  }
+
+  const onCarouselMouseEnd = () => {
+    const el = recCarouselRef.current
+    if (!el) return
+    if (dragState.current.active) {
+      el.style.scrollSnapType = "x mandatory"
+      // Snap to nearest after drag ends
+      requestAnimationFrame(() => {
+        const center = el.scrollLeft + el.clientWidth / 2
+        let bestIdx = 0
+        let bestDist = Infinity
+        recCardRefs.current.forEach((card, i) => {
+          if (!card) return
+          const cardCenter = card.offsetLeft + card.offsetWidth / 2
+          const d = Math.abs(cardCenter - center)
+          if (d < bestDist) {
+            bestDist = d
+            bestIdx = i
+          }
+        })
+        scrollToRec(bestIdx)
+      })
+    }
+    dragState.current.active = false
+  }
+
+  // Suppress card-click when the user just finished a drag.
+  const onCardClickGuard = (e: React.MouseEvent, then: () => void) => {
+    if (dragState.current.moved) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    then()
+  }
+
   return (
     <div className="flex flex-col min-h-full bg-background pb-6">
       {/* Hero — page title is the function; greeting demoted to subtitle */}
@@ -272,7 +331,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           </h2>
           <div
             ref={recCarouselRef}
-            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2 items-start"
+            onMouseDown={onCarouselMouseDown}
+            onMouseMove={onCarouselMouseMove}
+            onMouseUp={onCarouselMouseEnd}
+            onMouseLeave={onCarouselMouseEnd}
+            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2 items-start cursor-grab active:cursor-grabbing select-none"
             style={{ scrollSnapType: "x mandatory" }}
           >
             {recommended.map((doc, i) => {
@@ -286,7 +349,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                   }}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setExpandedRecId(expanded ? null : doc.id)}
+                  onClick={(e) => onCardClickGuard(e, () => setExpandedRecId(expanded ? null : doc.id))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
@@ -352,47 +415,27 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             })}
           </div>
           {recommended.length > 1 && (
-            <div className="flex items-center justify-center gap-3 mt-2">
-              <button
-                type="button"
-                onClick={() => scrollToRec(Math.max(0, activeRec - 1))}
-                disabled={activeRec === 0}
-                aria-label="Previous recommendation"
-                className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:border-interactive/40 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4 text-foreground" />
-              </button>
-              <div
-                className="flex items-center gap-1.5"
-                role="tablist"
-                aria-label="Recommended pagination"
-              >
-                {recommended.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeRec === i}
-                    aria-label={`Go to recommendation ${i + 1}`}
-                    onClick={() => scrollToRec(i)}
-                    className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      activeRec === i
-                        ? "w-5 bg-interactive"
-                        : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
-                    )}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => scrollToRec(Math.min(recommended.length - 1, activeRec + 1))}
-                disabled={activeRec === recommended.length - 1}
-                aria-label="Next recommendation"
-                className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:border-interactive/40 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4 text-foreground" />
-              </button>
+            <div
+              className="flex items-center justify-center gap-1.5 mt-2"
+              role="tablist"
+              aria-label="Recommended pagination"
+            >
+              {recommended.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeRec === i}
+                  aria-label={`Go to recommendation ${i + 1}`}
+                  onClick={() => scrollToRec(i)}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    activeRec === i
+                      ? "w-5 bg-interactive"
+                      : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
+                  )}
+                />
+              ))}
             </div>
           )}
         </section>
