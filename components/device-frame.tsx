@@ -87,7 +87,7 @@ export function DeviceFrame({
 
       {/* Caption directly under the device (desktop only) */}
       {label && (
-        <p className="hidden md:block absolute left-1/2 -translate-x-1/2 bottom-6 text-[11px] font-mono text-zinc-500 dark:text-zinc-400 tracking-wide">
+        <p className="hidden md:block absolute left-1/2 -translate-x-1/2 bottom-6 text-[13px] font-semibold text-zinc-600 dark:text-zinc-300">
           {label}
         </p>
       )}
