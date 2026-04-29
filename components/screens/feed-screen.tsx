@@ -7,9 +7,9 @@ import {
   Check,
   BookmarkPlus,
   Bookmark,
-  ChevronDown,
   ChevronRight,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Flame,
   RefreshCw,
@@ -206,7 +206,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
   const [feed, setFeed] = useState<FeedItem[]>(initialFeed)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeChip, setActiveChip] = useState<ActiveChip>(TOP_CHIPS[0])
-  const [showMore, setShowMore] = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   // Persisted local state (downloads, saves, read history, user profile)
   const [downloadStates, setDownloadStates] = useState<Record<string, DownloadState>>({})
@@ -679,22 +679,18 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             )}
           </div>
 
-          {/* Filter chips — top row always visible, MORE_CHIPS revealed by toggle.
-              When a hidden type filter is active, the More button gets a dot. */}
+          {/* Filter chips — single clean row. Type filters live in a bottom
+              sheet behind a filter icon at the right. */}
           {(() => {
             const isActive = (c: FilterChip) =>
               c.id === "type" && "type" in c && activeChip.id === "type" && "type" in activeChip
                 ? c.type === activeChip.type
                 : c.id === activeChip.id
             const hiddenActive =
-              !showMore && activeChip.id === "type" && MORE_CHIPS.some((c) => isActive(c))
+              activeChip.id === "type" && MORE_CHIPS.some((c) => isActive(c))
             return (
-              <>
-                <div
-                  className="flex flex-wrap gap-1.5 pb-2"
-                  role="tablist"
-                  aria-label="Feed filters"
-                >
+              <div className="flex items-center gap-1.5 pb-2" role="tablist" aria-label="Feed filters">
+                <div className="flex-1 flex flex-wrap gap-1.5">
                   {TOP_CHIPS.map((c, i) => (
                     <button
                       key={`top-${i}`}
@@ -711,58 +707,27 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                       {c.label}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => setShowMore((s) => !s)}
-                    aria-expanded={showMore}
-                    aria-controls="more-filters"
-                    className={cn(
-                      "shrink-0 h-8 pl-3 pr-2.5 rounded-full text-[13px] font-medium transition inline-flex items-center gap-1 relative",
-                      showMore
-                        ? "bg-foreground text-background"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    More
-                    <ChevronDown
-                      className={cn("w-3.5 h-3.5 transition-transform", showMore && "rotate-180")}
-                      aria-hidden
-                    />
-                    {hiddenActive && (
-                      <span
-                        className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-interactive ring-2 ring-background"
-                        aria-label="Filter active"
-                      />
-                    )}
-                  </button>
                 </div>
-
-                {showMore && (
-                  <div
-                    id="more-filters"
-                    className="flex flex-wrap gap-1.5 pb-2 -mt-1"
-                    role="tablist"
-                    aria-label="Type filters"
-                  >
-                    {MORE_CHIPS.map((c, i) => (
-                      <button
-                        key={`more-${i}`}
-                        role="tab"
-                        aria-selected={isActive(c)}
-                        onClick={() => setActiveChip(c)}
-                        className={cn(
-                          "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
-                          isActive(c)
-                            ? "bg-foreground text-background"
-                            : "bg-card border border-border text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
+                <button
+                  type="button"
+                  onClick={() => setFilterSheetOpen(true)}
+                  aria-label="More filters"
+                  className={cn(
+                    "shrink-0 relative w-8 h-8 rounded-full flex items-center justify-center transition",
+                    hiddenActive
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  {hiddenActive && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-interactive ring-2 ring-background"
+                      aria-label="Filter active"
+                    />
+                  )}
+                </button>
+              </div>
             )
           })()}
         </div>
@@ -850,6 +815,75 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
           You've seen everything · pull to refresh
         </p>
       </div>
+
+      {/* Filter bottom sheet — type filters + reset */}
+      {filterSheetOpen && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            onClick={() => setFilterSheetOpen(false)}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filters"
+            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl"
+          >
+            <div className="pt-2 pb-2">
+              <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
+              <div className="flex items-center justify-between px-5 mb-1">
+                <h2 className="text-base font-semibold text-foreground">Filter by type</h2>
+                <button
+                  onClick={() => setFilterSheetOpen(false)}
+                  aria-label="Close"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-muted active:scale-95 transition text-foreground text-xs font-semibold"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Done
+                </button>
+              </div>
+            </div>
+
+            <div className="px-3 pb-3">
+              {MORE_CHIPS.map((c, i) => {
+                const active =
+                  activeChip.id === "type" && "type" in activeChip && "type" in c && c.type === activeChip.type
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setActiveChip(c)
+                      setFilterSheetOpen(false)
+                    }}
+                    className="w-full flex items-center justify-between gap-3 px-4 min-h-[52px] rounded-xl hover:bg-muted/40 active:scale-[0.99] transition"
+                  >
+                    <span className={cn("text-[15px]", active ? "font-semibold text-foreground" : "text-foreground")}>
+                      {c.label}
+                    </span>
+                    {active && <Check className="w-4 h-4 text-interactive" aria-hidden />}
+                  </button>
+                )
+              })}
+              {activeChip.id === "type" && (
+                <div className="px-1 pt-2">
+                  <button
+                    onClick={() => {
+                      setActiveChip(TOP_CHIPS[0])
+                      setFilterSheetOpen(false)
+                    }}
+                    className="w-full h-11 rounded-xl bg-muted text-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
+                  >
+                    Clear filter
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="h-6" />
+          </div>
+        </>
+      )}
     </div>
   )
 }
