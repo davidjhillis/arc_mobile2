@@ -1103,18 +1103,13 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         {blocks.map((block, bi) => {
           const lines = block.split("\n").filter((l) => l.length > 0)
           if (lines.length === 0) return null
-          // Heading (## / ###)
+          // Heading (## / ###) — render as a normal-cased subheading.
           if (/^#{2,3}\s+/.test(lines[0]) && lines.length === 1) {
-            const level = lines[0].startsWith("###") ? 3 : 2
             const text = lines[0].replace(/^#{2,3}\s+/, "")
-            return level === 2 ? (
-              <h4 key={bi} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-1">
+            return (
+              <h4 key={bi} className="text-[15px] font-semibold text-foreground pt-1">
                 {text}
               </h4>
-            ) : (
-              <h5 key={bi} className="text-sm font-semibold text-foreground">
-                {text}
-              </h5>
             )
           }
           // List
