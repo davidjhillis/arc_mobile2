@@ -114,16 +114,16 @@ export function DownloadsScreen({ onNavigate }: DownloadsScreenProps) {
             <h1 className="text-base font-medium text-foreground">Offline Content</h1>
             <p className="text-xs text-muted-foreground">{downloads.length} items saved</p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10">
-            <WifiOff className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="text-xs font-medium text-emerald-600">Available offline</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-success/10">
+            <WifiOff className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs font-medium text-success">Available offline</span>
           </div>
         </div>
 
         {/* Storage info */}
         <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <HardDrive className="w-5 h-5 text-primary" />
+          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+            <HardDrive className="w-5 h-5 text-foreground" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">{totalSize} MB used</p>
@@ -143,8 +143,8 @@ export function DownloadsScreen({ onNavigate }: DownloadsScreenProps) {
                 key={item.id}
                 className={cn("flex items-center gap-3 p-4 rounded-xl", "bg-card border border-border")}
               >
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                  <Check className="w-5 h-5 text-emerald-600" />
+                <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-success" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>
@@ -205,13 +205,13 @@ export function DownloadsScreen({ onNavigate }: DownloadsScreenProps) {
                     className={cn(
                       "w-9 h-9 rounded-lg flex items-center justify-center",
                       "active:scale-95 transition-all",
-                      isDownloading ? "bg-muted" : "bg-primary/10",
+                      isDownloading ? "bg-muted" : "bg-interactive/10",
                     )}
                   >
                     {isDownloading ? (
-                      <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-interactive/30 border-t-interactive rounded-full animate-spin" />
                     ) : (
-                      <Download className="w-4 h-4 text-primary" />
+                      <Download className="w-4 h-4 text-interactive" />
                     )}
                   </button>
                 </div>

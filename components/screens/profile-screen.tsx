@@ -22,12 +22,17 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       {/* Header - clean and minimal */}
       <header className="px-5 pt-14 pb-6">
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <span className="text-primary font-semibold text-lg">SJ</span>
+          <div className="relative w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-card shadow-sm shrink-0">
+            <img
+              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=facearea&facepad=2.2&auto=format&q=80"
+              alt={userProfile.name}
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-medium text-foreground truncate">{userProfile.name}</h1>
-            <p className="text-sm text-muted-foreground truncate">{userProfile.chapter}</p>
+            <h1 className="text-xl font-semibold text-foreground truncate">{userProfile.name}</h1>
+            <p className="text-sm text-muted-foreground truncate">{userProfile.email}</p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{userProfile.chapter}</p>
           </div>
         </div>
 
@@ -38,7 +43,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             {userProfile.positions.map((position) => (
               <span
                 key={position}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-foreground border border-border"
               >
                 {position}
               </span>

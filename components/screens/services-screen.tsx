@@ -86,8 +86,8 @@ export function ServicesScreen({ onNavigate }: ServicesScreenProps) {
                 onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
                 className={cn("w-full flex items-center gap-3 p-4 text-left", "active:bg-muted/50 transition-colors")}
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-medium text-foreground">{group.label}</h3>
@@ -115,7 +115,7 @@ export function ServicesScreen({ onNavigate }: ServicesScreenProps) {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-1 h-1 rounded-full bg-primary/50" />
+                        <div className="w-1 h-1 rounded-full bg-muted-foreground/50" />
                         <span className="text-sm text-foreground">{activity.name}</span>
                       </div>
                       <div className="flex items-center gap-2">

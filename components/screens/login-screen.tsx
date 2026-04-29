@@ -93,7 +93,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               "w-full h-12 px-4 rounded-xl",
               "bg-card/50 border border-border/50",
               "text-foreground text-sm placeholder:text-muted-foreground",
-              "focus:outline-none focus:border-primary/50 focus:bg-card",
+              "focus:outline-none focus:border-interactive focus:bg-card",
               "transition-all duration-200",
             )}
           />
@@ -107,7 +107,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               "w-full h-12 px-4 rounded-xl",
               "bg-card/50 border border-border/50",
               "text-foreground text-sm placeholder:text-muted-foreground",
-              "focus:outline-none focus:border-primary/50 focus:bg-card",
+              "focus:outline-none focus:border-interactive focus:bg-card",
               "transition-all duration-200",
             )}
           />

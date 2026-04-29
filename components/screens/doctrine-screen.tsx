@@ -60,9 +60,10 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
           </div>
           <button
             onClick={() => onNavigate("ask")}
-            className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center active:scale-95 transition-all"
+            aria-label="Search doctrine"
+            className="w-9 h-9 rounded-xl bg-interactive/10 flex items-center justify-center active:scale-95 transition-all"
           >
-            <Sparkles className="w-4 h-4 text-primary" />
+            <Sparkles className="w-4 h-4 text-interactive" />
           </button>
         </div>
 
@@ -78,7 +79,7 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
               "w-full h-10 pl-9 pr-4 rounded-xl",
               "bg-muted/50 border-none",
               "text-sm text-foreground placeholder:text-muted-foreground",
-              "focus:outline-none focus:ring-1 focus:ring-primary/50",
+              "focus:outline-none focus:ring-2 focus:ring-interactive/40",
               "transition-all",
             )}
           />
@@ -100,8 +101,8 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
               "active:scale-[0.99] transition-all duration-200",
             )}
           >
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <BookOpen className="w-4 h-4 text-primary" />
+            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+              <BookOpen className="w-4 h-4 text-foreground" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium text-foreground leading-snug">{phase}</h3>

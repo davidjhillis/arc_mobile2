@@ -21,7 +21,6 @@ import {
   Pause,
   WifiOff,
   FileText,
-  Headphones,
   X,
   SkipBack,
   SkipForward,
@@ -872,22 +871,12 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const [isOnline, setIsOnline] = useState(true)
   const [showSummary, setShowSummary] = useState(false)
   const [showAskAI, setShowAskAI] = useState(false)
-  const [showListenPlayer, setShowListenPlayer] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [summaryGenerated, setSummaryGenerated] = useState(false)
   const [aiSummary, setAiSummary] = useState<string>("")
   const [aiKeyPoints, setAiKeyPoints] = useState<string[]>([])
   const [askAIQuestion, setAskAIQuestion] = useState("")
   const [askAIAnswer, setAskAIAnswer] = useState("")
   const [isAskingAI, setIsAskingAI] = useState(false)
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [audioLoading, setAudioLoading] = useState(false)
-  const [audioLoadingMessage, setAudioLoadingMessage] = useState("Preparing audio...")
-  const [audioProgress, setAudioProgress] = useState(0)
-  const [audioDuration, setAudioDuration] = useState(0)
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const doctrine = doctrineId ? mergedDoctrineContent[doctrineId] || defaultDoctrine : defaultDoctrine
 
@@ -1078,7 +1067,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           <ul key={`list-${elements.length}`} className="space-y-2 my-4 ml-4">
             {listItems.map((item, idx) => (
               <li key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0" />
                 <span className="text-foreground/80">{item}</span>
               </li>
             ))}
@@ -1229,155 +1218,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   }
 
 
-  // Load audio file when listen player opens (uses client-side cache + blob storage)
-  useEffect(() => {
-    if (showListenPlayer && isOnline && !audioUrl && doctrineId) {
-      const loadAudio = async () => {
-        // Check client-side localStorage cache first (instant)
-        const cacheKey = `tts_audio_${doctrineId}`
-        const cachedAudioUrl = localStorage.getItem(cacheKey)
-        
-        if (cachedAudioUrl) {
-          console.log(`[Frontend] Using client-side cached audio URL:`, cachedAudioUrl)
-          setAudioUrl(cachedAudioUrl)
-          setAudioLoading(false)
-          return
-        }
-        
-        setAudioLoading(true)
-        setAudioLoadingMessage("Checking cache...")
-        const startTime = Date.now()
-        
-        try {
-          // Generate audio via API (API checks blob cache first, then generates if needed)
-          console.log("Loading audio for:", doctrineId)
-          
-          const response = await fetch("/api/ai/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              text: doctrine.content,
-              voice: "shimmer",
-              doctrineId: doctrineId
-            }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            const elapsed = Date.now() - startTime
-            
-            if (data.audioUrl) {
-              // Cache the URL in localStorage for future use
-              localStorage.setItem(cacheKey, data.audioUrl)
-              
-              if (data.cached) {
-                console.log(`[Frontend] Audio loaded from server cache in ${elapsed}ms:`, data.audioUrl)
-                setAudioLoadingMessage("Loading audio...")
-                // Small delay to show "Loading audio..." message for cached files
-                setTimeout(() => {
-                  setAudioUrl(data.audioUrl)
-                  setAudioLoading(false)
-                }, 100)
-              } else {
-                console.log(`[Frontend] Audio generated in ${elapsed}ms:`, data.audioUrl)
-                setAudioLoadingMessage("Generating audio...")
-                setAudioUrl(data.audioUrl)
-                setAudioLoading(false)
-              }
-            } else {
-              throw new Error("No audio URL received from AI TTS service")
-            }
-          } else {
-            const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-            console.error("AI TTS API error:", errorData)
-            throw new Error(errorData.error || errorData.details || "AI TTS service failed")
-          }
-        } catch (error) {
-          console.error("AI TTS error:", error)
-          setAudioLoading(false)
-          alert(`AI TTS failed: ${error instanceof Error ? error.message : "Unknown error"}. Please check your API configuration.`)
-          setShowListenPlayer(false)
-        }
-      }
-
-      loadAudio()
-    }
-  }, [showListenPlayer, isOnline, doctrineId, doctrine.content, audioUrl])
-
-  // Reset audio when doctrine changes
-  useEffect(() => {
-    if (doctrineId) {
-      setAudioUrl(null)
-      setAudioCurrentTime(0)
-      setAudioProgress(0)
-      setIsPlaying(false)
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
-      }
-    }
-  }, [doctrineId])
-
-
-  // Update playback speed when changed
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    audio.playbackRate = playbackSpeed
-  }, [playbackSpeed])
-
-  const togglePlayPause = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio) {
-      console.error("Audio element not found")
-      return
-    }
-
-    if (isPlaying) {
-      audio.pause()
-    } else {
-      audio.play().catch((error) => {
-        console.error("Error playing audio:", error)
-        alert("Unable to play audio. Please try again.")
-      })
-    }
-  }, [isPlaying])
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
-
-  const skipBackward = useCallback(() => {
-    const audio = audioRef.current
-    if (audio && audio.duration) {
-      audio.currentTime = Math.max(0, audio.currentTime - 10)
-    }
-  }, [])
-
-  const skipForward = useCallback(() => {
-    const audio = audioRef.current
-    if (audio && audio.duration) {
-      audio.currentTime = Math.min(audio.duration, audio.currentTime + 10)
-    }
-  }, [])
-
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current
-    if (!audio || !audio.duration) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const percent = (e.clientX - rect.left) / rect.width
-    audio.currentTime = percent * audio.duration
-  }
-
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted z-20">
-        <div className="h-full bg-primary transition-all duration-150" style={{ width: `${readProgress}%` }} />
+        <div className="h-full bg-interactive transition-all duration-150" style={{ width: `${readProgress}%` }} />
       </div>
 
       {/* Header */}
@@ -1395,11 +1240,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                 onClick={() => setIsBookmarked(!isBookmarked)}
                 className={cn(
                   "w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all",
-                  isBookmarked ? "bg-primary/10" : "bg-muted",
+                  isBookmarked ? "bg-interactive/10" : "bg-muted",
                 )}
               >
                 {isBookmarked ? (
-                  <BookmarkCheck className="w-5 h-5 text-primary" />
+                  <BookmarkCheck className="w-5 h-5 text-interactive" />
                 ) : (
                   <Bookmark className="w-5 h-5 text-foreground" />
                 )}
@@ -1409,13 +1254,13 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                 disabled={isDownloading || isDownloaded}
                 className={cn(
                   "w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all",
-                  isDownloaded ? "bg-green-100" : "bg-muted",
+                  isDownloaded ? "bg-success/10" : "bg-muted",
                 )}
               >
                 {isDownloading ? (
                   <DownloadCloud className="w-5 h-5 text-muted-foreground animate-pulse" />
                 ) : isDownloaded ? (
-                  <Check className="w-5 h-5 text-green-600" />
+                  <Check className="w-5 h-5 text-success" />
                 ) : (
                   <Download className="w-5 h-5 text-foreground" />
                 )}
@@ -1428,7 +1273,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
           {/* Meta tags */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full">
+            <span className="px-2 py-0.5 bg-muted text-foreground text-xs font-medium rounded-full">
               {doctrine.category}
             </span>
             <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">
@@ -1460,7 +1305,6 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                 setShowSummary(false)
               } else {
                 // Close other widgets
-                setShowListenPlayer(false)
                 setShowAskAI(false)
                 // Reset summary state to allow regeneration
                 setSummaryGenerated(false)
@@ -1482,44 +1326,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           </button>
           <button
             onClick={() => {
-              if (!isOnline) return
-              if (showListenPlayer) {
-                setShowListenPlayer(false)
-                setIsPlaying(false)
-                setAudioUrl(null)
-                if (audioRef.current) {
-                  audioRef.current.pause()
-                  audioRef.current.currentTime = 0
-                }
-              } else {
-                // Close other widgets
-                setShowSummary(false)
-                setShowAskAI(false)
-                // Open listen player
-                setShowListenPlayer(true)
-              }
-            }}
-            disabled={!isOnline}
-            title="Listen to article"
-            className={cn(
-              "inline-flex items-center justify-center w-10 h-10 rounded-xl transition-all active:scale-[0.97]",
-              !isOnline
-                ? "bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed"
-                : showListenPlayer
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "bg-muted/50 text-foreground hover:bg-muted",
-            )}
-          >
-            <Headphones className={cn("w-5 h-5", showListenPlayer && "text-primary-foreground")} />
-          </button>
-          <button
-            onClick={() => {
               if (showAskAI) {
                 setShowAskAI(false)
               } else {
                 // Close other widgets
                 setShowSummary(false)
-                setShowListenPlayer(false)
                 // Open ask AI
                 setShowAskAI(true)
               }
@@ -1541,8 +1352,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 bg-interactive/10 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-interactive" />
                 </div>
                 <h4 className="text-sm font-semibold text-foreground">AI Summary</h4>
               </div>
@@ -1557,9 +1368,9 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             {!aiSummary && !summaryGenerated ? (
               <div className="flex items-center gap-3 py-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                  <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
                 </div>
                 <span className="text-sm text-muted-foreground">Generating summary...</span>
               </div>
@@ -1588,7 +1399,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                   )}
                 </div>
                 <div className="text-right mb-4">
-                  <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
+                  <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-interactive transition-colors">
                     <Info className="w-3.5 h-3.5" />
                     <span>About AI-based content</span>
                   </button>
@@ -1597,11 +1408,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-muted-foreground">How was this response?</p>
                     <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-green-500 hover:text-green-600 hover:bg-green-50 transition-colors">
+                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-success hover:text-success hover:bg-success/5 transition-colors">
                         <ThumbsUp className="w-4 h-4" />
                         <span>Yes</span>
                       </button>
-                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                      <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
                         <ThumbsDown className="w-4 h-4" />
                         <span>No</span>
                       </button>
@@ -1613,170 +1424,13 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
           </div>
         )}
 
-        {showListenPlayer && isOnline && (
-          <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground">Listen to Article</h4>
-                  <p className="text-xs text-muted-foreground">{doctrine.title}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowListenPlayer(false)
-                  setIsPlaying(false)
-                  setAudioUrl(null)
-                  setAudioCurrentTime(0)
-                  setAudioProgress(0)
-                  if (audioRef.current) {
-                    audioRef.current.pause()
-                    audioRef.current.currentTime = 0
-                  }
-                }}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Loading State */}
-            {audioLoading && (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                  <span className="text-sm text-muted-foreground">{audioLoadingMessage}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Hidden audio element */}
-            {audioUrl && (
-              <audio
-                ref={audioRef}
-                src={audioUrl}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onLoadedMetadata={() => {
-                  if (audioRef.current?.duration) {
-                    setAudioDuration(audioRef.current.duration)
-                    console.log("Audio loaded, duration:", audioRef.current.duration)
-                  }
-                }}
-                onCanPlay={() => {
-                  console.log("Audio can play")
-                }}
-                onTimeUpdate={() => {
-                  if (audioRef.current) {
-                    setAudioCurrentTime(audioRef.current.currentTime)
-                    if (audioRef.current.duration) {
-                      setAudioProgress((audioRef.current.currentTime / audioRef.current.duration) * 100)
-                    }
-                  }
-                }}
-                onEnded={() => {
-                  setIsPlaying(false)
-                  setAudioCurrentTime(0)
-                  setAudioProgress(0)
-                }}
-                onError={(e) => {
-                  console.error("Audio playback error:", e)
-                  const audio = audioRef.current
-                  if (audio) {
-                    console.error("Audio error details:", audio.error)
-                  }
-                  alert("Error playing audio. Please try again.")
-                  setIsPlaying(false)
-                }}
-                preload="auto"
-                crossOrigin="anonymous"
-              />
-            )}
-
-            {/* Audio Player */}
-            {!audioLoading && audioUrl && (
-              <>
-                {/* Progress Bar */}
-                <div className="mb-4">
-                  <div
-                    onClick={handleProgressClick}
-                    className="w-full bg-muted rounded-full h-2 cursor-pointer"
-                  >
-                    <div
-                      className="bg-gradient-to-r from-blue-600 to-cyan-600 h-2 rounded-full transition-all"
-                      style={{ width: `${audioProgress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
-                    <span>{formatTime(audioCurrentTime)}</span>
-                    <span>{formatTime(audioDuration)}</span>
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={togglePlayPause}
-                      className="flex items-center justify-center px-4 py-2.5 rounded-lg border border-border hover:bg-muted transition-all"
-                    >
-                      <div className="w-7 h-7 rounded-full border border-border bg-muted flex items-center justify-center">
-                        {isPlaying ? (
-                          <Pause className="w-4 h-4 text-foreground" />
-                        ) : (
-                          <Play className="w-4 h-4 text-foreground" />
-                        )}
-                      </div>
-                    </button>
-                    <button
-                      onClick={skipBackward}
-                      className="p-2 hover:bg-muted rounded-lg transition-colors"
-                    >
-                      <SkipBack className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={skipForward}
-                      className="p-2 hover:bg-muted rounded-lg transition-colors"
-                    >
-                      <SkipForward className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Gauge className="w-4 h-4 text-muted-foreground" />
-                    <select
-                      value={playbackSpeed}
-                      onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                      className="text-xs bg-muted border border-border rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value={1}>1x</option>
-                      <option value={1.25}>1.25x</option>
-                      <option value={1.5}>1.5x</option>
-                      <option value={2}>2x</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Error State */}
-            {!audioLoading && !audioUrl && (
-              <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground mb-2">Unable to generate AI audio.</p>
-                <p className="text-xs text-muted-foreground">Please check your API configuration and try again.</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {showAskAI && (
           <div className="mt-4 p-6 border-2 border-border rounded-xl bg-card">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 bg-interactive/10 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-interactive" />
                 </div>
                 <h4 className="text-sm font-semibold text-foreground">Ask about this article</h4>
               </div>
@@ -1852,9 +1506,9 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               {isAskingAI ? (
                 <div className="flex items-center gap-3 py-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" />
+                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                    <div className="w-2 h-2 bg-interactive rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
                   </div>
                   <span className="text-sm text-muted-foreground">Thinking...</span>
                 </div>
@@ -1872,11 +1526,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">Was this answer helpful?</p>
                       <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-green-500 hover:text-green-600 hover:bg-green-50 transition-colors">
+                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-success hover:text-success hover:bg-success/5 transition-colors">
                           <ThumbsUp className="w-4 h-4" />
                           <span>Yes</span>
                         </button>
-                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
                           <ThumbsDown className="w-4 h-4" />
                           <span>No</span>
                         </button>
@@ -1897,7 +1551,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         <div className="px-5 pb-4 border-b border-border">
           <button
             onClick={() => setShowToc(!showToc)}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 border-2 border-border bg-card rounded-lg hover:border-primary transition-colors"
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 border-2 border-border bg-card rounded-lg hover:border-interactive transition-colors"
           >
             <div className="flex items-center gap-2">
               <List className="w-5 h-5 text-muted-foreground" />

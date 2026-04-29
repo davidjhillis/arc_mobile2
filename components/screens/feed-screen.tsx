@@ -271,7 +271,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                     setSelectedSection(null)
                     setSelectedType(null)
                   }}
-                  className="text-xs text-primary font-medium hover:underline"
+                  className="text-xs text-interactive font-medium hover:underline"
                 >
                   Clear all filters
                 </button>
@@ -301,19 +301,19 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             >
               {/* Top row: tags */}
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-medium text-foreground bg-muted px-2 py-0.5 rounded-full">
                   {sectionLabel}
                 </span>
                 <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                   {typeLabel}
                 </span>
                 {item.isNew && (
-                  <span className="text-xs font-medium bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full">
+                  <span className="text-xs font-medium bg-success/10 text-success px-2 py-0.5 rounded-full">
                     New
                   </span>
                 )}
                 {downloadState === "downloaded" && (
-                  <span className="text-xs font-medium bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="text-xs font-medium bg-interactive/10 text-interactive-deep px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     Offline
                   </span>
@@ -341,7 +341,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                     className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
                       downloadState === "downloaded"
-                        ? "bg-emerald-500/10 text-emerald-600"
+                        ? "bg-success/10 text-success"
                         : downloadState === "downloading"
                           ? "bg-muted text-muted-foreground"
                           : "bg-muted text-foreground active:scale-95",
@@ -361,7 +361,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                     onClick={(e) => handleSave(item.id, e)}
                     className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95",
-                      isSaved ? "bg-primary/10 text-primary" : "bg-muted text-foreground",
+                      isSaved ? "bg-interactive/10 text-interactive" : "bg-muted text-foreground",
                     )}
                   >
                     {isSaved ? <Bookmark className="w-4 h-4 fill-current" /> : <BookmarkPlus className="w-4 h-4" />}

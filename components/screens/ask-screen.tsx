@@ -1,29 +1,328 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
-import { ArrowUp, Loader2, Sparkles, BookOpen, AudioLines, Square, Volume2, VolumeX } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { massCareContent } from "@/lib/mass-care-content"
+import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react"
+import {
+  Search,
+  X,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  ChevronRight,
+  FileText,
+  ListChecks,
+  BookOpen,
+  UserCircle2,
+  Loader2,
+  ArrowUp,
+  Mic,
+  MicOff,
+} from "lucide-react"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
+import { cn } from "@/lib/utils"
+import { massCareContent, type DoctrineContent } from "@/lib/mass-care-content"
 
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  fullContent?: string // Full content if truncated for TTS
-  sources?: Array<{ id: string; title: string }>
-  hasMore?: boolean // Whether there's more content to hear
+// ---------------------------------------------------------------------------
+// Search index + boolean parser
+// ---------------------------------------------------------------------------
+
+type IndexedDoc = DoctrineContent & {
+  haystack: string // lowercased title + summary + content for matching
 }
 
-const suggestions = [
-  "How do I access situational awareness reports?",
-  "What are the key phases of Mass Care operations?",
-  "How do I set up a shelter?",
-  "What is the client intake process?",
-  "What are the feeding safety protocols?",
-  "How do I handle reunification services?",
+const buildIndex = (): IndexedDoc[] =>
+  Object.values(massCareContent).map((doc) => ({
+    ...doc,
+    haystack: `${doc.title} ${doc.summary} ${doc.content}`.toLowerCase(),
+  }))
+
+// Stopwords filtered from natural-language queries
+const STOPWORDS = new Set([
+  "a","an","the","and","or","of","to","in","on","at","for","by","with","is","are","was","were",
+  "do","does","did","be","been","being","have","has","had","i","my","me","you","your","we","our",
+  "this","that","these","those","it","its","as","from","but","not","if","so","than","then","into",
+  "what","which","who","whom","when","where","why","how","can","could","should","would","will","may",
+])
+
+// Tiny boolean expression parser.
+// Supports: quoted "exact phrase", AND, OR, NOT, parentheses, and field:value
+// (field one of: title, category, type). Bare terms are AND-joined.
+type BoolNode =
+  | { kind: "term"; value: string; field?: "title" | "category" | "type" }
+  | { kind: "phrase"; value: string }
+  | { kind: "and"; left: BoolNode; right: BoolNode }
+  | { kind: "or"; left: BoolNode; right: BoolNode }
+  | { kind: "not"; child: BoolNode }
+
+const tokenize = (q: string): string[] => {
+  const tokens: string[] = []
+  // Match (in order): field:"phrase", "phrase", paren, boolean, bare term
+  const re = /\s*(?:(\w+:"(?:[^"\\]|\\.)*")|("(?:[^"\\]|\\.)*")|(\()|(\))|(AND|OR|NOT)\b|([^\s()]+))/gy
+  let m: RegExpExecArray | null
+  while ((m = re.exec(q))) {
+    const t = m[1] || m[2] || m[3] || m[4] || m[5] || m[6]
+    if (t) tokens.push(t)
+    if (re.lastIndex === m.index) break
+  }
+  return tokens
+}
+
+const parseQuery = (q: string): BoolNode | null => {
+  const tokens = tokenize(q.trim())
+  if (!tokens.length) return null
+  let i = 0
+
+  const peek = () => tokens[i]
+  const consume = () => tokens[i++]
+
+  // expression := term (OR term)*
+  const parseExpr = (): BoolNode => {
+    let left = parseAnd()
+    while (peek() === "OR") {
+      consume()
+      const right = parseAnd()
+      left = { kind: "or", left, right }
+    }
+    return left
+  }
+
+  // and := unary (AND? unary)*  — implicit AND between bare terms
+  const parseAnd = (): BoolNode => {
+    let left = parseUnary()
+    while (peek() && peek() !== "OR" && peek() !== ")") {
+      if (peek() === "AND") consume()
+      const right = parseUnary()
+      left = { kind: "and", left, right }
+    }
+    return left
+  }
+
+  // Strip surrounding punctuation that natural-language queries often carry
+  // ("215?" → "215", "shelter," → "shelter") while preserving internal chars.
+  const cleanTerm = (s: string) => s.replace(/^[^\w]+|[^\w]+$/g, "").toLowerCase()
+
+  const parseUnary = (): BoolNode => {
+    if (peek() === "NOT") {
+      consume()
+      return { kind: "not", child: parseUnary() }
+    }
+    if (peek() === "(") {
+      consume()
+      const inner = parseExpr()
+      if (peek() === ")") consume()
+      return inner
+    }
+    const tok = consume()!
+    if (tok.startsWith('"') && tok.endsWith('"')) {
+      return { kind: "phrase", value: tok.slice(1, -1).toLowerCase() }
+    }
+    // field:value form (supports field:"quoted phrase" too)
+    const colon = tok.indexOf(":")
+    if (colon > 0) {
+      const field = tok.slice(0, colon).toLowerCase()
+      const rawValue = tok.slice(colon + 1)
+      const value = rawValue.replace(/^"(.*)"$/, "$1").toLowerCase()
+      if (field === "title" || field === "category" || field === "type") {
+        return { kind: "term", value, field }
+      }
+    }
+    return { kind: "term", value: cleanTerm(tok) }
+  }
+
+  try {
+    return parseExpr()
+  } catch {
+    return null
+  }
+}
+
+const evalNode = (node: BoolNode, doc: IndexedDoc): boolean => {
+  switch (node.kind) {
+    case "term":
+      if (!node.value) return true // empty term (e.g. lone punctuation) is a no-op
+      if (node.field === "title") return doc.title.toLowerCase().includes(node.value)
+      if (node.field === "category") return doc.category.toLowerCase().includes(node.value)
+      if (node.field === "type") return doc.type.toLowerCase() === node.value
+      return doc.haystack.includes(node.value)
+    case "phrase":
+      return doc.haystack.includes(node.value)
+    case "and":
+      return evalNode(node.left, doc) && evalNode(node.right, doc)
+    case "or":
+      return evalNode(node.left, doc) || evalNode(node.right, doc)
+    case "not":
+      return !evalNode(node.child, doc)
+  }
+}
+
+// Score for ranking — title hits count strongest, then summary, then body.
+// We also reward partial-stem matches so "completes" can hit "completing".
+const scoreDoc = (doc: IndexedDoc, terms: string[]): number => {
+  let s = 0
+  const title = doc.title.toLowerCase()
+  const summary = doc.summary.toLowerCase()
+  for (const t of terms) {
+    if (!t || t.length < 2) continue
+    // Exact substring (highest signal)
+    if (title.includes(t)) s += 10
+    if (summary.includes(t)) s += 5
+    const matches = doc.haystack.split(t).length - 1
+    s += matches
+    // Stem-ish fallback: try the 4-char prefix (catches complete/completes/completing)
+    if (matches === 0 && t.length >= 5) {
+      const stem = t.slice(0, t.length - 2)
+      const stemMatches = doc.haystack.split(stem).length - 1
+      s += stemMatches * 0.5
+      if (title.includes(stem)) s += 3
+    }
+  }
+  return s
+}
+
+// Detect whether the raw query uses explicit boolean syntax. If not, we run a
+// looser natural-language match instead of strict AND-everything semantics.
+const isBooleanQuery = (q: string): boolean =>
+  /\b(AND|OR|NOT)\b/.test(q) || /["()]/.test(q) || /\b(title|category|type):/i.test(q)
+
+// For natural queries: extract content terms (drop stopwords + clean punctuation)
+const naturalTerms = (q: string): string[] =>
+  q
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/^[^\w]+|[^\w]+$/g, ""))
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t))
+
+// Build a contextual snippet around the first match, with the term emphasized.
+const buildSnippet = (doc: IndexedDoc, terms: string[]): { text: string; matchIndex: number } => {
+  const text = doc.content.replace(/\n+/g, " ").replace(/##+\s*/g, "").replace(/\s+/g, " ")
+  const lower = text.toLowerCase()
+  let idx = -1
+  for (const t of terms) {
+    if (!t) continue
+    const i = lower.indexOf(t)
+    if (i >= 0 && (idx === -1 || i < idx)) idx = i
+  }
+  if (idx === -1) return { text: doc.summary, matchIndex: -1 }
+  const start = Math.max(0, idx - 60)
+  const end = Math.min(text.length, idx + 140)
+  const prefix = start > 0 ? "…" : ""
+  const suffix = end < text.length ? "…" : ""
+  return { text: prefix + text.slice(start, end) + suffix, matchIndex: idx - start + prefix.length }
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+
+const TYPE_LABEL: Record<DoctrineContent["type"], string> = {
+  overview: "Overview",
+  standard: "Standard",
+  "task-sheet": "Task Sheet",
+  role: "Role",
+}
+
+const TYPE_ICON: Record<DoctrineContent["type"], typeof FileText> = {
+  overview: BookOpen,
+  standard: FileText,
+  "task-sheet": ListChecks,
+  role: UserCircle2,
+}
+
+// Curated demo queries — each one is known to surface relevant doctrine.
+const SUGGESTED_QUERIES = [
+  "Who completes a Form 215?",
+  "Daily tactics planning",
+  "Closing mass care activities",
+  "situational awareness AND reports",
+  '"Mass Care" NOT closing',
+  "type:task-sheet leadership",
 ]
+
+type Filter = "all" | DoctrineContent["type"]
+
+const FILTERS: Array<{ id: Filter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "task-sheet", label: "Task Sheets" },
+  { id: "standard", label: "Standards" },
+  { id: "overview", label: "Overviews" },
+  { id: "role", label: "Roles" },
+]
+
+// ---------------------------------------------------------------------------
+// Tiny markdown renderer for the AI answer card.
+// Handles paragraphs, bold (**), italic (*), inline code (`), bullet lists, and
+// line breaks. Intentionally minimal — the AI output stays terse.
+// ---------------------------------------------------------------------------
+
+const renderInline = (text: string, keyBase: string): React.ReactNode[] => {
+  const out: React.ReactNode[] = []
+  // Match bold, italic, code in a single pass; preserves order.
+  const re = /(\*\*[^*]+\*\*)|(\*[^*]+\*)|(`[^`]+`)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  let i = 0
+  while ((match = re.exec(text))) {
+    if (match.index > lastIndex) {
+      out.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith("**")) {
+      out.push(
+        <strong key={`${keyBase}-b-${i++}`} className="font-semibold text-foreground">
+          {token.slice(2, -2)}
+        </strong>
+      )
+    } else if (token.startsWith("`")) {
+      out.push(
+        <code key={`${keyBase}-c-${i++}`} className="font-mono text-[0.92em] bg-card/70 px-1 py-0.5 rounded">
+          {token.slice(1, -1)}
+        </code>
+      )
+    } else {
+      out.push(
+        <em key={`${keyBase}-i-${i++}`} className="italic">
+          {token.slice(1, -1)}
+        </em>
+      )
+    }
+    lastIndex = match.index + token.length
+  }
+  if (lastIndex < text.length) out.push(text.slice(lastIndex))
+  return out
+}
+
+const Markdown = ({ text }: { text: string }) => {
+  // Split into blocks separated by blank lines (paragraph breaks).
+  const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/)
+  return (
+    <>
+      {blocks.map((block, bi) => {
+        const lines = block.split("\n")
+        // List block — every line starts with "- " or "* "
+        if (lines.length > 0 && lines.every((l) => /^\s*[-*]\s+/.test(l))) {
+          return (
+            <ul key={bi} className="list-disc pl-5 space-y-1 my-2">
+              {lines.map((l, li) => (
+                <li key={li}>{renderInline(l.replace(/^\s*[-*]\s+/, ""), `${bi}-${li}`)}</li>
+              ))}
+            </ul>
+          )
+        }
+        // Paragraph — keep single \n as line break inside
+        return (
+          <p key={bi} className={bi > 0 ? "mt-3" : ""}>
+            {lines.map((l, li) => (
+              <span key={li}>
+                {renderInline(l, `${bi}-${li}`)}
+                {li < lines.length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        )
+      })}
+    </>
+  )
+}
 
 interface AskScreenProps {
   initialMessage?: string
@@ -34,1016 +333,642 @@ export interface AskScreenRef {
   sendMessage: (text: string) => void
 }
 
-export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(
-  ({ initialMessage, onNavigate }, ref) => {
-    const [messages, setMessages] = useState<Message[]>([])
-    const [input, setInput] = useState(initialMessage || "")
-  const [isLoading, setIsLoading] = useState(false)
-  const [isVoiceActive, setIsVoiceActive] = useState(false)
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false)
-  const [ttsEnabled, setTtsEnabled] = useState(true) // TTS toggle - default enabled
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(({ initialMessage, onNavigate }, ref) => {
+  const [query, setQuery] = useState(initialMessage ?? "")
+  const [committedQuery, setCommittedQuery] = useState(initialMessage ?? "")
+  const [filter, setFilter] = useState<Filter>("all")
+  const [aiAnswer, setAiAnswer] = useState<string>("")
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiExpanded, setAiExpanded] = useState(false)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [isFocused, setIsFocused] = useState(false)
+
+  // TTS for the AI answer
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  
-  // Voice recognition for Ask screen
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [ttsLoading, setTtsLoading] = useState(false)
+
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const aiAbortRef = useRef<AbortController | null>(null)
+
+  // Voice dictation — types into the search field, doesn't auto-submit.
   const {
     isListening,
-    transcript,
     interimTranscript,
-    isSupported: isVoiceSupported,
-    error: voiceError,
+    isSupported: speechSupported,
     startListening,
     stopListening,
-    reset: resetVoice,
+    reset: resetSpeech,
   } = useSpeechRecognition({
-    onResult: (fullTranscript, isFinal) => {
-      console.log("[AskScreen] Voice result:", { fullTranscript, isFinal })
-      if (isFinal && fullTranscript.trim()) {
-        setInput(fullTranscript.trim())
-        setIsVoiceActive(false)
+    onResult: (transcript, isFinal) => {
+      if (isFinal && transcript.trim()) {
+        setQuery((prev) => (prev ? `${prev} ${transcript.trim()}` : transcript.trim()))
+        resetSpeech()
         stopListening()
-        // Auto-send after a brief delay
-        setTimeout(() => {
-          handleSend(fullTranscript.trim())
-        }, 300)
-      }
-    },
-    onError: (error) => {
-      console.error("[AskScreen] Voice error:", error)
-      setIsVoiceActive(false)
-      // Show user-friendly error
-      if (error.message.includes("not-allowed") || error.message.includes("permission")) {
-        alert("Microphone permission denied. Please enable microphone access in your browser settings.")
-      } else if (error.message.includes("no-speech")) {
-        // This is normal if user doesn't speak, don't show error
-        console.log("No speech detected")
-      } else {
-        console.error("Voice recognition error:", error.message)
+        // Refocus so the user can edit or submit
+        setTimeout(() => inputRef.current?.focus(), 50)
       }
     },
   })
 
-    // Expose sendMessage method via ref
-    useImperativeHandle(ref, () => ({
-      sendMessage: (text: string) => {
-        handleSend(text)
-      },
-    }))
+  // Memoized index — built once
+  const index = useMemo(() => buildIndex(), [])
 
-  // Show greeting message on first load
+  // Hydrate recent searches from localStorage
   useEffect(() => {
-    if (messages.length === 0 && !initialMessage) {
-      const greetingText = "Hello! I'm your Red Cross Doctrine assistant. How may I help you today?"
-      const greetingMessage: Message = {
-        id: "greeting",
-        role: "assistant",
-        content: greetingText,
-        sources: undefined,
-      }
-      setMessages([greetingMessage])
-      // Auto-play greeting TTS
-      setTimeout(() => {
-        playAudioResponse(greetingText)
-      }, 500)
-    }
+    try {
+      const raw = localStorage.getItem("arc_recent_searches")
+      if (raw) setRecentSearches(JSON.parse(raw))
+    } catch {}
   }, [])
 
-  // Auto-send initial message if provided (e.g., from voice)
+  // Imperative API kept so app-shell still compiles
+  useImperativeHandle(ref, () => ({
+    sendMessage: (text: string) => {
+      setQuery(text)
+      runSearch(text)
+    },
+  }))
+
+  // If we land here with an initialMessage, run the search
   useEffect(() => {
-    if (initialMessage && initialMessage.trim() && messages.length <= 1) {
-      handleSend(initialMessage)
-    }
-  }, [initialMessage])
-
-  // Auto-resize textarea when input or transcript changes
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto'
-      const scrollHeight = inputRef.current.scrollHeight
-      inputRef.current.style.height = `${Math.min(scrollHeight, 200)}px`
-    }
-  }, [input, transcript, interimTranscript])
-
-  // Check if input is a greeting (not a question) - only for first user message
-  const isGreeting = (text: string, isFirstUserMessage: boolean): boolean => {
-    // Only treat as greeting if it's the first user message
-    if (!isFirstUserMessage) return false
-    
-    const greetingPatterns = [
-      /^(hi|hello|hey|greetings|good morning|good afternoon|good evening)$/i,
-      /^(thanks|thank you|thx)$/i,
-      /^(bye|goodbye|see you)$/i,
-      /^(how are you|how's it going|what's up)$/i,
-    ]
-    // Only match if it's JUST a greeting, not a greeting + question
-    const trimmed = text.trim()
-    return greetingPatterns.some(pattern => pattern.test(trimmed)) && trimmed.length < 30
-  }
-
-  // Extract suggested actions from AI response
-  const extractActions = (content: string): string[] => {
-    const actions: string[] = []
-    // Look for bullet points or numbered lists that could be actions
-    const lines = content.split('\n')
-    for (const line of lines) {
-      // Match bullet points (•, -, *) followed by questions or action phrases
-      const bulletMatch = line.match(/^[\s]*[•\-\*]\s*(.+)$/)
-      if (bulletMatch) {
-        const action = bulletMatch[1].trim()
-        // Only include if it looks like a question or action
-        if (action.length > 10 && action.length < 100) {
-          actions.push(action)
-        }
-      }
-    }
-    return actions.slice(0, 4) // Limit to 4 actions
-  }
-
-  // Handle action button click
-  const handleActionClick = (action: string, useVoice: boolean = false) => {
-    if (useVoice && isVoiceSupported) {
-      // Set input and trigger voice
-      setInput(action)
-      setIsVoiceActive(true)
-      startListening()
+    if (initialMessage && initialMessage.trim()) {
+      runSearch(initialMessage)
     } else {
-      // Send as text message
-      handleSend(action)
+      // Focus the search input on mount when empty
+      setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Split text into ~75 word chunks at sentence boundaries (approximately 5 seconds of speech)
-  const splitTextForTTS = (text: string): { short: string; remaining: string } => {
-    // Split by sentences first
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
-    const words = text.split(/\s+/)
-    const targetWordCount = 75 // ~5 seconds
-    
-    // If text is short enough, return it all
-    if (words.length <= targetWordCount) {
-      return { short: text, remaining: "" }
-    }
-    
-    // Build short version sentence by sentence until we hit ~75 words
-    let shortSentences: string[] = []
-    let wordCount = 0
-    
-    for (const sentence of sentences) {
-      const sentenceWords = sentence.split(/\s+/).length
-      if (wordCount + sentenceWords <= targetWordCount) {
-        shortSentences.push(sentence)
-        wordCount += sentenceWords
-      } else {
-        break
-      }
-    }
-    
-    const shortText = shortSentences.join(" ").trim()
-    const remaining = sentences.slice(shortSentences.length).join(" ").trim()
-    
-    return { short: shortText, remaining }
-  }
+  // ---------------- Search execution ----------------
 
-  // Play TTS for AI response - full content, no splitting
-  const playAudioResponse = async (text: string, messageId?: string) => {
-    // Don't play if TTS is disabled
-    if (!ttsEnabled) {
-      console.log("[AskScreen] TTS disabled, skipping playback")
-      return
-    }
-    
-    if (!text || !text.trim()) {
-      console.warn("[AskScreen] Empty text, skipping TTS")
-      return
-    }
-    
+  const persistRecent = (q: string) => {
+    const next = [q, ...recentSearches.filter((s) => s !== q)].slice(0, 5)
+    setRecentSearches(next)
     try {
-      console.log("[AskScreen] Starting TTS for message:", messageId, "text length:", text.length)
-      
-      // Stop any currently playing audio first
-      if (audioRef.current) {
-        console.log("[AskScreen] Stopping previous audio")
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
-      }
-      
-      // Clear state - this will trigger useEffect cleanup
-      setIsPlayingAudio(false)
-      setAudioUrl(null)
-      
-      // Small delay to ensure audio element is reset and state cleared
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      // Play full content - no splitting to ensure complete playback
-      console.log("[AskScreen] Fetching TTS from API")
-      const response = await fetch("/api/ai/tts", {
+      localStorage.setItem("arc_recent_searches", JSON.stringify(next))
+    } catch {}
+  }
+
+  const runSearch = (raw: string) => {
+    const q = raw.trim()
+    if (!q) {
+      setCommittedQuery("")
+      setAiAnswer("")
+      setAiError(null)
+      return
+    }
+    setCommittedQuery(q)
+    persistRecent(q)
+    fetchAiAnswer(q)
+  }
+
+  const fetchAiAnswer = async (q: string) => {
+    // Cancel in-flight request
+    aiAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiAbortRef.current = controller
+
+    setAiAnswer("")
+    setAiError(null)
+    setAiLoading(true)
+    setAiExpanded(false)
+    stopSpeaking()
+
+    // Build a context block from top-3 candidate docs so the AI grounds its answer.
+    // Natural queries use OR-with-scoring so the AI gets relevant docs even when
+    // not every word literally appears in the source.
+    const terms = naturalTerms(q)
+    const candidates = isBooleanQuery(q)
+      ? (() => {
+          const node = parseQuery(q)
+          return node ? index.filter((d) => evalNode(node, d)) : index
+        })()
+      : index
+    const ranked = candidates
+      .map((d) => ({ d, s: scoreDoc(d, terms) }))
+      .filter(({ s }) => s > 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 3)
+      .map(({ d }) => `---\nArticle: ${d.title}\nCategory: ${d.category}\nSummary: ${d.summary}\n\n${d.content.substring(0, 2500)}\n---`)
+      .join("\n\n")
+
+    try {
+      const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: text.trim(),
-          voice: "shimmer",
-          doctrineId: `chat_${Date.now()}_${messageId || "temp"}`,
+          messages: [{ role: "user", content: q }],
+          context: ranked || undefined,
         }),
+        signal: controller.signal,
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.audioUrl) {
-          console.log("[AskScreen] TTS API success, setting audio URL:", data.audioUrl)
-          // Set audio URL - this will trigger the useEffect to play it
-          setAudioUrl(data.audioUrl)
-        } else {
-          console.warn("[AskScreen] TTS API returned no audioUrl")
-        }
-      } else {
-        const errorText = await response.text()
-        console.error("[AskScreen] TTS API error:", response.status, errorText)
-      }
-    } catch (error) {
-      console.error("[AskScreen] TTS error:", error)
-      // Don't show error to user, just skip TTS
-    }
-  }
-
-  // Handle audio playback - simplified and more reliable
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    if (!audioUrl || !ttsEnabled) {
-      if (!ttsEnabled) {
-        // Stop audio if TTS is disabled
-        audio.pause()
-        audio.currentTime = 0
-        setIsPlayingAudio(false)
-      }
-      return
-    }
-
-    console.log("[AskScreen] useEffect triggered for audioUrl:", audioUrl)
-    
-    // Simple approach: set src and let browser handle loading/playing
-    const handleCanPlay = () => {
-      console.log("[AskScreen] Audio can play, attempting playback")
-      audio.play().then(() => {
-        console.log("[AskScreen] Audio playback started successfully")
-        setIsPlayingAudio(true)
-      }).catch((error) => {
-        console.error("[AskScreen] Play failed:", error)
-        setIsPlayingAudio(false)
-      })
-    }
-
-    const handleError = () => {
-      const error = audio.error
-      console.error("[AskScreen] Audio error:", {
-        code: error?.code,
-        message: error?.message,
-        networkState: audio.networkState,
-        readyState: audio.readyState
-      })
-      setIsPlayingAudio(false)
-    }
-
-    // Remove old listeners
-    audio.removeEventListener('canplay', handleCanPlay)
-    audio.removeEventListener('error', handleError)
-    audio.removeEventListener('ended', () => {
-      setIsPlayingAudio(false)
-      setAudioUrl(null)
-    })
-    
-    // Add new listeners
-    audio.addEventListener('canplay', handleCanPlay, { once: true })
-    audio.addEventListener('error', handleError, { once: true })
-    audio.addEventListener('ended', () => {
-      console.log("[AskScreen] Audio ended")
-      setIsPlayingAudio(false)
-      setAudioUrl(null)
-    }, { once: true })
-    
-    // Reset and load
-    audio.pause()
-    audio.currentTime = 0
-    audio.load()
-    
-  }, [audioUrl, ttsEnabled])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  // Find relevant articles based on question - returns both context string and metadata
-  const findRelevantArticles = (question: string): { context: string; sources: Array<{ id: string; title: string }> } => {
-    const questionLower = question.toLowerCase()
-    const articleScores: Array<{ article: typeof massCareContent[string]; score: number }> = []
-    
-    // Search through all articles for relevant content
-    Object.entries(massCareContent).forEach(([id, article]) => {
-      const titleLower = article.title.toLowerCase()
-      const summaryLower = article.summary.toLowerCase()
-      const categoryLower = article.category.toLowerCase()
-      const contentLower = article.content.toLowerCase()
-      
-      let score = 0
-      
-      // Check if question keywords match article content
-      const keywords = questionLower.split(/\s+/).filter(word => word.length > 3)
-      
-      keywords.forEach((keyword) => {
-        if (titleLower.includes(keyword)) score += 5 // Title matches are most important
-        if (summaryLower.includes(keyword)) score += 3 // Summary matches are important
-        if (categoryLower.includes(keyword)) score += 2 // Category matches
-        if (contentLower.includes(keyword)) score += 1 // Content matches
-      })
-      
-      // Boost score if question phrase appears in title or summary
-      if (titleLower.includes(questionLower.substring(0, 30))) score += 10
-      if (summaryLower.includes(questionLower.substring(0, 30))) score += 5
-      
-      if (score > 0) {
-        articleScores.push({ article: { ...article, id }, score })
-      }
-    })
-    
-    // Sort by score and take top 3 most relevant
-    articleScores.sort((a, b) => b.score - a.score)
-    const topArticles = articleScores.slice(0, 3)
-    
-    // Format articles for context
-    const context = topArticles.map(({ article }) => {
-      return `---\nArticle: ${article.title}\nCategory: ${article.category}\nSummary: ${article.summary}\n\nContent:\n${article.content.substring(0, 4000)}\n---`
-    }).join("\n\n")
-    
-    // Extract source metadata
-    const sources = topArticles.map(({ article }) => ({
-      id: article.id || "",
-      title: article.title
-    }))
-    
-    return { context, sources }
-  }
-
-  const handleSend = async (text?: string) => {
-    const messageText = text || input.trim()
-    if (!messageText || isLoading) return
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: messageText,
-    }
-
-    // Check if this is the first user message
-    const isFirstUserMessage = messages.filter(m => m.role === "user").length === 0
-    
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setIsLoading(true)
-
-    // Check if it's a greeting - only for first user message, respond conversationally without searching doctrine
-    if (isGreeting(messageText, isFirstUserMessage)) {
-      const greetingResponse = "Hello! I'm here to help you with Red Cross doctrine and procedures. How may I help you today?"
-      
-      const greetingReply: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: greetingResponse,
-        sources: undefined,
-      }
-      
-      setMessages((prev) => [...prev, greetingReply])
-      setIsLoading(false)
-      
-      // Play TTS for greeting
-      await playAudioResponse(greetingResponse, greetingReply.id)
-      return
-    }
-
-    // Create assistant message placeholder for streaming
-    const assistantMessageId = (Date.now() + 1).toString()
-    let responseSources: Array<{ id: string; title: string }> = []
-    
-    // Create placeholder message immediately so it shows in chat
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      sources: undefined,
-    }
-    setMessages((prev) => [...prev, assistantMessage])
-    
-    try {
-      // Find relevant articles for context (only for actual questions)
-      let { context: relevantContext, sources } = findRelevantArticles(messageText)
-      responseSources = sources
-      
-      // If question is about "who completes a 215" or similar, ensure daily-tactics-planning is included
-      const questionLower = messageText.toLowerCase()
-      // Detect questions about Form 215 or who completes/fills/does 215
-      const is215Question = /(who|what|how).*(completes?|fills?|does?|responsible|do).*215|215.*(who|what|completes?|fills?|does?|responsible)|form\s*215|^215/i.test(questionLower)
-      if (is215Question) {
-        // For 215 questions, prioritize daily-tactics-planning - make it the primary source
-        const dailyTacticsArticle = massCareContent["daily-tactics-planning"]
-        if (dailyTacticsArticle) {
-          const articleContext = `---\nArticle: ${dailyTacticsArticle.title}\nCategory: ${dailyTacticsArticle.category}\nSummary: ${dailyTacticsArticle.summary}\n\nContent:\n${dailyTacticsArticle.content.substring(0, 4000)}\n---`
-          // Put daily-tactics-planning first in context and sources
-          relevantContext = relevantContext ? `${articleContext}\n\n${relevantContext}` : articleContext
-          // Remove any existing daily-tactics-planning and add it first
-          responseSources = responseSources.filter(s => s.id !== "daily-tactics-planning")
-          responseSources.unshift({
-            id: "daily-tactics-planning",
-            title: "Daily Tactics Planning (completing the 215s) & Communicating Mass Care Needs to DRO Leaders Task Sheet"
-          })
-        }
-      }
-      
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...messages.map((m) => ({ role: m.role, content: m.content })),
-            { role: "user", content: messageText },
-          ],
-          context: relevantContext || undefined,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      // Handle streaming response
-      const reader = response.body?.getReader()
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error("No stream")
       const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error("No response body")
-      }
-
-      let accumulatedContent = ""
-      let ttsStarted = false // Track if TTS has been initiated
-
+      let acc = ""
+      let buffer = ""
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split("\n").filter((line) => line.trim())
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6)
-            if (data === "[DONE]") {
-              // Final update before ending
-              if (accumulatedContent.trim()) {
-                // Ensure sources are set correctly (daily-tactics-planning should be first for 215 questions)
-                const finalSources = responseSources.length > 0 ? [...responseSources] : undefined
-                console.log("[AskScreen] Final sources for message:", finalSources)
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? {
-                          ...msg,
-                          content: accumulatedContent,
-                          fullContent: accumulatedContent,
-                          sources: finalSources,
-                        }
-                      : msg
-                  )
-                )
-              }
-              setIsLoading(false)
-              // Start TTS with full response after streaming completes
-              if (accumulatedContent.trim()) {
-                console.log("[AskScreen] Streaming complete, starting TTS for message:", assistantMessageId)
-                // Small delay to ensure state is updated
-                setTimeout(() => {
-                  playAudioResponse(accumulatedContent, assistantMessageId)
-                }, 100)
-              }
-              return
-            }
-
+        buffer += decoder.decode(value, { stream: true })
+        // Process complete SSE messages — separated by blank line (\n\n) per spec
+        let idx
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const evt = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 2)
+          for (const line of evt.split("\n")) {
+            const t = line.trim()
+            if (!t.startsWith("data:")) continue
+            const data = t.slice(5).trim()
+            if (!data || data === "[DONE]") continue
             try {
-              const json = JSON.parse(data)
-              const content = json.content
-              if (content && typeof content === 'string') {
-                // Fix: Trim leading whitespace/punctuation if this is the first chunk and it starts incorrectly
-                let contentToAdd = content
-                if (accumulatedContent === "" && /^[\s,\.;:]/.test(content)) {
-                  // If first chunk starts with punctuation, it might be missing the first word
-                  // This is likely an AI generation issue, but we'll trim leading punctuation
-                  contentToAdd = content.replace(/^[\s,\.;:]+/, '')
-                  console.warn("[Stream] First chunk started with punctuation, trimmed:", content.substring(0, 20))
-                }
-                accumulatedContent += contentToAdd
-                // Update the assistant message with accumulated content (ensure it's always visible)
-                // Use a copy of responseSources to ensure it doesn't get mutated
-                const currentSources = responseSources.length > 0 ? [...responseSources] : undefined
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { 
-                          ...msg, 
-                          content: accumulatedContent, // Always show full content as it streams
-                          fullContent: accumulatedContent,
-                          sources: currentSources,
-                        }
-                      : msg
-                  )
-                )
-
-                // Start TTS immediately when we have ~50 words or first complete sentence
-                // But wait for streaming to complete to ensure full response is played
-                if (!ttsStarted && accumulatedContent.trim()) {
-                  const wordCount = accumulatedContent.split(/\s+/).length
-                  const hasCompleteSentence = /[.!?]\s/.test(accumulatedContent)
-                  
-                  // Start TTS if we have at least 50 words OR a complete sentence with 20+ words
-                  // But mark as started so we don't trigger multiple times during streaming
-                  if (wordCount >= 50 || (hasCompleteSentence && wordCount >= 20)) {
-                    ttsStarted = true
-                    // Don't start TTS yet - wait for full response to ensure complete playback
-                  }
-                }
+              const parsed = JSON.parse(data)
+              // Our /api/ai/chat re-encodes chunks as { content: "..." }
+              const delta =
+                typeof parsed?.content === "string"
+                  ? parsed.content
+                  : parsed?.choices?.[0]?.delta?.content
+              if (typeof delta === "string") {
+                acc += delta
+                setAiAnswer(acc)
               }
-            } catch (e) {
-              // Ignore parse errors for comments or invalid JSON
-              console.warn("Failed to parse SSE data:", e, data)
-            }
+            } catch {}
           }
         }
       }
-
-      setIsLoading(false)
-      
-      // Update message with full content
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? { 
-                ...msg, 
-                content: accumulatedContent, // Show full content in chat
-                fullContent: accumulatedContent,
-                sources: responseSources.length > 0 ? responseSources : undefined,
-              }
-            : msg
-        )
-      )
-      
-      // Start TTS with full response after streaming completes
-      if (accumulatedContent.trim()) {
-        console.log("[AskScreen] Streaming complete (fallback), starting TTS for message:", assistantMessageId)
-        // Small delay to ensure state is updated
-        setTimeout(() => {
-          playAudioResponse(accumulatedContent, assistantMessageId)
-        }, 100)
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setAiError("Couldn't generate an answer right now. Search results are still available below.")
       }
-    } catch (error) {
-      console.error("Ask AI error:", error)
-      setIsLoading(false)
-      // Update the assistant message with error
-      const errorMessage = "I'm sorry, I'm having trouble processing your question right now. Please try again later."
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? {
-                ...msg,
-                content: errorMessage,
-              }
-            : msg
-        )
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  // ---------------- TTS ----------------
+
+  const stopSpeaking = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    setIsSpeaking(false)
+  }
+
+  const speakAnswer = async () => {
+    if (isSpeaking) {
+      stopSpeaking()
+      return
+    }
+    if (!aiAnswer.trim()) return
+    try {
+      setTtsLoading(true)
+      const res = await fetch("/api/ai/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: aiAnswer,
+          voice: "shimmer",
+          doctrineId: `chat_${Date.now()}`,
+        }),
+      })
+      if (!res.ok) throw new Error("TTS failed")
+      const data = await res.json()
+      if (!data.audioUrl) throw new Error("No audio URL")
+      if (!audioRef.current) audioRef.current = new Audio()
+      audioRef.current.src = data.audioUrl
+      audioRef.current.onended = () => setIsSpeaking(false)
+      audioRef.current.onerror = () => setIsSpeaking(false)
+      await audioRef.current.play()
+      setIsSpeaking(true)
+    } catch {
+      setIsSpeaking(false)
+    } finally {
+      setTtsLoading(false)
+    }
+  }
+
+  // ---------------- Results computation ----------------
+
+  const results = useMemo(() => {
+    if (!committedQuery.trim()) return []
+    const terms = naturalTerms(committedQuery)
+    let matched: IndexedDoc[]
+    if (isBooleanQuery(committedQuery)) {
+      const node = parseQuery(committedQuery)
+      matched = node ? index.filter((d) => evalNode(node, d)) : []
+    } else {
+      // Natural language: every doc is a candidate; ranking will filter zeros.
+      matched = index
+    }
+    const filtered = filter === "all" ? matched : matched.filter((d) => d.type === filter)
+    return filtered
+      .map((d) => ({ doc: d, score: scoreDoc(d, terms), snippet: buildSnippet(d, terms) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+  }, [committedQuery, filter, index])
+
+  // ---------------- Render helpers ----------------
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    inputRef.current?.blur()
+    runSearch(query)
+  }
+
+  const handleClear = () => {
+    setQuery("")
+    setCommittedQuery("")
+    setAiAnswer("")
+    setAiError(null)
+    aiAbortRef.current?.abort()
+    stopSpeaking()
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto"
+      inputRef.current.focus()
+    }
+  }
+
+  // Click handler for suggested / recent searches — clears any prior state
+  // (input text, AI answer, listening, textarea height) and runs the new query.
+  const pickQuery = (q: string) => {
+    aiAbortRef.current?.abort()
+    stopSpeaking()
+    if (isListening) stopListening()
+    setQuery(q)
+    if (inputRef.current) inputRef.current.style.height = "auto"
+    runSearch(q)
+  }
+
+  const renderHighlighted = (text: string, terms: string[]) => {
+    if (!terms.length) return text
+    const escaped = terms
+      .filter((t) => t.length > 1)
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    if (!escaped.length) return text
+    const re = new RegExp(`(${escaped.join("|")})`, "ig")
+    const parts = text.split(re)
+    return parts.map((p, i) =>
+      re.test(p) ? (
+        <mark key={i} className="bg-warning/30 text-foreground rounded px-0.5">
+          {p}
+        </mark>
+      ) : (
+        <span key={i}>{p}</span>
       )
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
-  // Empty state - Perplexity style centered
-  if (messages.length === 0) {
-    return (
-      <div className="flex flex-col h-full min-h-[calc(100dvh-5rem)]">
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
-            <Sparkles className="w-7 h-7 text-primary" />
-          </div>
-          <h1 className="text-xl font-medium text-foreground mb-2">Ask anything</h1>
-          <p className="text-sm text-muted-foreground text-center mb-10 max-w-[240px]">
-            Get instant answers from Red Cross doctrine and procedures
-          </p>
-
-          {/* Suggestion chips */}
-          <div className="w-full max-w-sm space-y-2">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => handleSend(suggestion)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left",
-                  "bg-card border border-border",
-                  "active:scale-[0.98] transition-all duration-200",
-                )}
-              >
-                <BookOpen className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm text-foreground">{suggestion}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Input bar - Google AI style */}
-        <div className="p-4 pb-6">
-          {/* Main input container */}
-          <div 
-            className={cn(
-              "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
-              "shadow-sm hover:shadow-md",
-              (input.trim() || isListening) 
-                ? "border-primary/30 shadow-primary/5" 
-                : "border-border",
-            )}
-          >
-            {/* Textarea container */}
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  // Auto-expand textarea
-                  e.target.style.height = 'auto'
-                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
-                }}
-                onKeyDown={handleKeyDown}
-                onFocus={(e) => {
-                  // Expand to minimum focused height
-                  if (e.target.scrollHeight < 56) {
-                    e.target.style.height = '56px'
-                  }
-                }}
-                onBlur={(e) => {
-                  // Collapse if empty
-                  if (!input.trim()) {
-                    e.target.style.height = 'auto'
-                  }
-                }}
-                placeholder={isListening ? "Listening..." : "Ask anything about Red Cross doctrine..."}
-                rows={1}
-                autoComplete="off"
-                className={cn(
-                  "flex-1 px-5 py-4 bg-transparent resize-none",
-                  "text-base text-foreground placeholder:text-muted-foreground/70",
-                  "focus:outline-none focus:placeholder:text-muted-foreground/50",
-                  "min-h-[56px] max-h-[200px] leading-relaxed",
-                  "transition-all duration-200",
-                  isListening && "text-primary",
-                )}
-                disabled={isListening}
-              />
-              
-              {/* Smart action button - voice/send toggle */}
-              <div className="flex items-end pr-3 pb-3 self-end">
-                {/* Single smart button: Voice when empty, Send when has text, Stop when listening */}
-                <button
-                  onClick={() => {
-                    if (isListening) {
-                      // Stop listening
-                      stopListening()
-                      setIsVoiceActive(false)
-                    } else if (input.trim()) {
-                      // Send message
-                      handleSend()
-                    } else if (isVoiceSupported) {
-                      // Start voice input
-                      setIsVoiceActive(true)
-                      startListening()
-                    }
-                  }}
-                  className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center",
-                    "transition-all duration-200",
-                    isListening
-                      ? "bg-primary text-primary-foreground"
-                      : input.trim()
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/80 text-foreground hover:bg-muted",
-                  )}
-                  title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
-                >
-                  {isListening ? (
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                  ) : input.trim() ? (
-                    <ArrowUp className="w-4 h-4" />
-                  ) : (
-                    <AudioLines className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* Voice transcript - floating below input */}
-            {(isListening || transcript || interimTranscript) && (
-              <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
-                <AudioLines className="w-4 h-4 animate-pulse" />
-                <span>{transcript || interimTranscript || "Listening..."}</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Voice toggle - below input */}
-          <div className="flex justify-center pt-3">
-            <button
-              onClick={() => {
-                const newTtsEnabled = !ttsEnabled
-                setTtsEnabled(newTtsEnabled)
-                if (!newTtsEnabled && audioRef.current) {
-                  audioRef.current.pause()
-                  audioRef.current.currentTime = 0
-                  setAudioUrl(null)
-                  setIsPlayingAudio(false)
-                }
-              }}
-              className={cn(
-                "px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5",
-                "transition-all duration-200",
-                ttsEnabled
-                  ? "text-primary"
-                  : "text-muted-foreground",
-              )}
-            >
-              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              <span>{ttsEnabled ? "Voice on" : "Voice off"}</span>
-            </button>
-          </div>
-        </div>
-      </div>
     )
   }
 
-  // Conversation view
+  const queryTerms = useMemo(() => naturalTerms(committedQuery), [committedQuery])
+
+  // ---------------- Render ----------------
+
+  const isQuestion = /\?$|^(who|what|when|where|why|how|can|should|do|does|is|are)\b/i.test(committedQuery)
+  const showAiCard = committedQuery.trim().length > 0 && (aiLoading || aiAnswer || aiError)
+  const aiCollapsedHeight = aiExpanded ? "max-h-[2000px]" : "max-h-44"
+
   return (
-    <div className="flex flex-col h-full min-h-[calc(100dvh-5rem)]">
-      {/* Header with voice toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
-        <span className="text-xs text-muted-foreground">Red Cross Doctrine Assistant</span>
-        <button
-          onClick={() => {
-            const newTtsEnabled = !ttsEnabled
-            setTtsEnabled(newTtsEnabled)
-            if (!newTtsEnabled && audioRef.current) {
-              audioRef.current.pause()
-              audioRef.current.currentTime = 0
-              setAudioUrl(null)
-              setIsPlayingAudio(false)
-            }
-          }}
-          className={cn(
-            "px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5",
-            "transition-all duration-200",
-            ttsEnabled
-              ? "bg-primary/10 text-primary"
-              : "bg-muted/50 text-muted-foreground",
-          )}
-        >
-          {isPlayingAudio ? (
-            <AudioLines className="w-3.5 h-3.5 animate-pulse" />
-          ) : ttsEnabled ? (
-            <Volume2 className="w-3.5 h-3.5" />
-          ) : (
-            <VolumeX className="w-3.5 h-3.5" />
-          )}
-          <span>{ttsEnabled ? "Voice" : "Muted"}</span>
-        </button>
-      </div>
-      
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 touch-scroll">
-        <div className="space-y-6">
-          {messages.map((message) => (
-            <div key={message.id}>
-              {message.role === "user" ? (
-                <div className="flex justify-end">
-                  <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-md bg-primary text-primary-foreground">
-                    <p className="text-sm">{message.content}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {/* Show full content */}
-                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                        {message.fullContent || message.content}
-                      </p>
-                      
-                      {/* Source links */}
-                      {message.sources && message.sources.length > 0 && (
-                        <div className="flex flex-col gap-2 mt-4">
-                          <span className="text-xs text-muted-foreground font-medium">Source content:</span>
-                          <div className="flex flex-col gap-2">
-                            {message.sources.map((source) => (
-                              <button
-                                key={source.id}
-                                onClick={() => {
-                                  console.log("[AskScreen] Source clicked:", source.id, source.title)
-                                  if (onNavigate && source.id) {
-                                    console.log("[AskScreen] Navigating to doctrine-detail with id:", source.id)
-                                    // Fix: onNavigate signature is (screen, disasterType?, doctrineId?, group?)
-                                    onNavigate("doctrine-detail", undefined, source.id)
-                                  } else {
-                                    console.warn("[AskScreen] Cannot navigate - onNavigate:", !!onNavigate, "source.id:", source.id)
-                                  }
-                                }}
-                                className={cn(
-                                  "px-3 py-2 rounded-lg text-left text-sm",
-                                  "bg-primary/10 text-primary border border-primary/20",
-                                  "hover:bg-primary/20 active:scale-[0.98] transition-all",
-                                  "flex items-center gap-2 cursor-pointer"
-                                )}
-                                title={source.title}
-                              >
-                                <BookOpen className="w-4 h-4 flex-shrink-0" />
-                                <span className="truncate">{source.title}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {isLoading && (
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-              </div>
-              <div className="flex items-center gap-2 py-2">
-                <span className="text-sm text-muted-foreground">Searching doctrine...</span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Hidden audio element for TTS playback - always render to ensure it's available */}
-      <audio
-        ref={audioRef}
-        src={audioUrl || undefined}
-        onPlay={() => {
-          console.log("[AskScreen] Audio play event")
-          setIsPlayingAudio(true)
-        }}
-        onEnded={() => {
-          console.log("[AskScreen] Audio ended event")
-          setIsPlayingAudio(false)
-          // Don't clear audioUrl immediately - keep it for potential replay
-          setTimeout(() => {
-            setAudioUrl(null)
-          }, 100)
-        }}
-        onError={(e) => {
-          const audio = e.currentTarget as HTMLAudioElement
-          const error = audio.error
-          console.error("[AskScreen] Audio playback error:", {
-            error,
-            code: error?.code,
-            message: error?.message,
-            networkState: audio.networkState,
-            readyState: audio.readyState,
-            src: audio.src
-          })
-          setIsPlayingAudio(false)
-          // Clear audioUrl on error to allow retry with new URL
-          setAudioUrl(null)
-        }}
-        onLoadStart={() => console.log("[AskScreen] Audio load start")}
-        onLoadedData={() => console.log("[AskScreen] Audio loaded data")}
-        onCanPlay={() => console.log("[AskScreen] Audio can play")}
-        preload="auto"
-      />
-
-      {/* Input bar - Google AI style */}
-      <div className="p-4 pb-safe bg-background">
-        {/* Main input container */}
-        <div 
-          className={cn(
-            "relative rounded-3xl border bg-card transition-all duration-300 ease-out",
-            "shadow-sm",
-            (input.trim() || isListening) 
-              ? "border-primary/30 shadow-md shadow-primary/5" 
-              : "border-border hover:shadow-md",
-          )}
-        >
-          {/* Textarea container */}
-          <div className="flex items-end">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value)
-                // Auto-expand textarea
-                e.target.style.height = 'auto'
-                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
-              }}
-              onKeyDown={handleKeyDown}
-              onFocus={(e) => {
-                if (e.target.scrollHeight < 48) {
-                  e.target.style.height = '48px'
-                }
-              }}
-              onBlur={(e) => {
-                if (!input.trim()) {
-                  e.target.style.height = 'auto'
-                }
-              }}
-              placeholder={isListening ? "Listening..." : "Ask a follow-up..."}
-              rows={1}
-              autoComplete="off"
-              className={cn(
-                "flex-1 px-5 py-3.5 bg-transparent resize-none",
-                "text-base text-foreground placeholder:text-muted-foreground/70",
-                "focus:outline-none",
-                "min-h-[48px] max-h-[160px] leading-relaxed",
-                "transition-all duration-200",
-                isListening && "text-primary",
-              )}
-              disabled={isListening}
-            />
-            
-            {/* Smart action button - bottom aligned */}
-            <div className="flex items-end pr-3 pb-3 self-end">
-              {/* Single button: Voice when empty, Send when has text, Stop when listening */}
-              <button
-                onClick={() => {
-                  if (isListening) {
-                    // Stop listening
-                    stopListening()
-                    setIsVoiceActive(false)
-                  } else if (input.trim()) {
-                    // Send message
-                    handleSend()
-                  } else if (isVoiceSupported) {
-                    // Start voice input
-                    setIsVoiceActive(true)
-                    startListening()
+    <div className="flex flex-col min-h-full bg-background">
+      {/* Sticky search header */}
+      <header className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border">
+        <form onSubmit={handleSubmit} className="px-5 pt-14 pb-4">
+          <label className="sr-only" htmlFor="doctrine-search">
+            Search doctrine
+          </label>
+          <div
+            className={cn(
+              "relative bg-muted transition-all duration-200 ease-out",
+              "border border-transparent",
+              // Gemini-like: collapsed pill when empty, expanded card when active
+              query.length > 0 || isFocused
+                ? "rounded-3xl bg-card border-interactive/40 shadow-md px-2 pt-2 pb-2"
+                : "rounded-full px-1.5 py-1"
+            )}
+          >
+            <div className="flex items-start gap-2 px-2 pt-1.5">
+              <Search
+                className={cn(
+                  "w-5 h-5 text-muted-foreground shrink-0 transition-transform mt-1.5",
+                  query.length > 0 && "translate-y-0.5"
+                )}
+                aria-hidden
+              />
+              <textarea
+                ref={inputRef}
+                id="doctrine-search"
+                rows={1}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="search"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  // auto-grow
+                  const el = e.currentTarget
+                  el.style.height = "auto"
+                  el.style.height = `${Math.min(el.scrollHeight, 240)}px`
+                }}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    inputRef.current?.blur()
+                    runSearch(query)
                   }
                 }}
-                disabled={isLoading}
+                placeholder={isListening ? "Listening…" : "Search doctrine or ask a question…"}
                 className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center",
-                  "transition-all duration-200",
-                  isLoading
-                    ? "bg-muted text-muted-foreground"
-                    : isListening
-                      ? "bg-primary text-primary-foreground"
-                      : input.trim()
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/80 text-foreground hover:bg-muted",
+                  "flex-1 bg-transparent resize-none focus:outline-none",
+                  "text-foreground placeholder:text-muted-foreground",
+                  query.length > 0 || isFocused
+                    ? "min-h-[5rem] text-[17px] leading-[1.5] py-1"
+                    : "min-h-[2rem] text-base leading-6 py-0.5"
                 )}
-                title={isListening ? "Stop" : input.trim() ? "Send" : "Voice input"}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isListening ? (
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                ) : input.trim() ? (
+              />
+              {/* Right-side action: submit or mic */}
+              {query.trim() ? (
+                <button
+                  type="submit"
+                  aria-label="Search"
+                  className="shrink-0 w-9 h-9 rounded-full bg-interactive flex items-center justify-center text-interactive-foreground active:scale-95 transition"
+                >
                   <ArrowUp className="w-4 h-4" />
-                ) : (
-                  <AudioLines className="w-4 h-4" />
+                </button>
+              ) : speechSupported ? (
+                <button
+                  type="button"
+                  onClick={() => (isListening ? stopListening() : startListening())}
+                  aria-label={isListening ? "Stop voice input" : "Voice input"}
+                  aria-pressed={isListening}
+                  className={cn(
+                    "shrink-0 w-9 h-9 rounded-full flex items-center justify-center active:scale-95 transition",
+                    isListening
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-transparent text-muted-foreground hover:bg-card hover:text-foreground"
+                  )}
+                >
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+              ) : null}
+            </div>
+            {/* Live interim transcript while listening */}
+            {isListening && interimTranscript && (
+              <div className="px-5 pb-2 text-sm text-muted-foreground italic truncate">
+                {interimTranscript}
+              </div>
+            )}
+          </div>
+
+          {/* Clear bar — large, always-visible reset pill outside the input.
+              Avoids accidental taps on a tiny inline X when finger lands near
+              the right edge of the input bubble. */}
+          {(query.length > 0 || committedQuery) && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={handleClear}
+                aria-label="Clear search and start over"
+                className={cn(
+                  "inline-flex items-center gap-1.5 min-h-[40px] px-4 rounded-full",
+                  "bg-muted text-foreground text-sm font-medium",
+                  "active:scale-95 hover:bg-muted/70 transition"
                 )}
+              >
+                <X className="w-4 h-4" aria-hidden />
+                Clear search
               </button>
             </div>
-          </div>
-          
-          {/* Voice transcript - floating below input */}
-          {(isListening || transcript || interimTranscript) && (
-            <div className="px-5 py-2 border-t border-border/50 text-sm text-primary flex items-center gap-2">
-              <AudioLines className="w-4 h-4 animate-pulse" />
-              <span>{transcript || interimTranscript || "Listening..."}</span>
-            </div>
           )}
-        </div>
+
+          {/* Filter chips */}
+          <div className="mt-4 -mx-5 px-5 flex gap-2 overflow-x-auto touch-scroll" role="tablist" aria-label="Result type">
+            {FILTERS.map((f) => {
+              const active = filter === f.id
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setFilter(f.id)}
+                  className={cn(
+                    "shrink-0 h-9 px-3.5 rounded-full text-sm font-medium transition-colors",
+                    active
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {f.label}
+                </button>
+              )
+            })}
+          </div>
+        </form>
+      </header>
+
+      {/* Body */}
+      <div className="flex-1 px-5 py-5">
+        {/* Empty state */}
+        {!committedQuery && (
+          <div className="space-y-6">
+            {recentSearches.length > 0 && (
+              <section aria-labelledby="recent-heading">
+                <h2 id="recent-heading" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Recent
+                </h2>
+                <div className="bg-card rounded-2xl border border-border divide-y divide-border overflow-hidden">
+                  {recentSearches.map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => pickQuery(q)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/60 active:bg-muted"
+                    >
+                      <Search className="w-4 h-4 text-muted-foreground" aria-hidden />
+                      <span className="flex-1 text-sm text-foreground">{q}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            <section aria-labelledby="suggested-heading">
+              <h2 id="suggested-heading" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Try searching
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {SUGGESTED_QUERIES.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => pickQuery(q)}
+                    className="px-3 py-2 rounded-full bg-card border border-border text-sm text-foreground hover:border-interactive/40 hover:bg-interactive-soft/30 active:scale-[0.98] transition"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <p className="text-xs text-muted-foreground pt-2">
+              Tip: combine terms with <code className="font-mono text-foreground">AND</code>,{" "}
+              <code className="font-mono text-foreground">OR</code>, <code className="font-mono text-foreground">NOT</code>, or
+              wrap an exact phrase in quotes.
+            </p>
+          </div>
+        )}
+
+        {/* AI answer card */}
+        {showAiCard && (
+          <section aria-labelledby="ai-answer-heading" className="mb-6">
+            <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 overflow-hidden">
+              <header className="flex items-center gap-2.5 px-5 pt-4 pb-3">
+                <div className="w-8 h-8 rounded-xl bg-interactive flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-interactive-foreground" aria-hidden />
+                </div>
+                <h2 id="ai-answer-heading" className="text-sm font-semibold text-foreground">
+                  AI Answer
+                </h2>
+                {aiLoading && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin ml-1" aria-hidden />}
+                <div className="flex-1" />
+                {aiAnswer && !aiLoading && (
+                  <button
+                    onClick={speakAnswer}
+                    aria-label={isSpeaking ? "Stop reading" : "Read answer aloud"}
+                    aria-pressed={isSpeaking}
+                    className={cn(
+                      "h-9 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-medium",
+                      isSpeaking
+                        ? "bg-interactive text-interactive-foreground"
+                        : "bg-card border border-border text-foreground hover:border-interactive/40"
+                    )}
+                  >
+                    {ttsLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : isSpeaking ? (
+                      <VolumeX className="w-3.5 h-3.5" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5" />
+                    )}
+                    {isSpeaking ? "Stop" : "Listen"}
+                  </button>
+                )}
+              </header>
+              <div
+                className={cn(
+                  "px-5 pb-4 text-[15px] leading-[1.65] text-foreground transition-[max-height] duration-300 overflow-hidden relative",
+                  aiCollapsedHeight
+                )}
+              >
+                {aiError && <p className="text-muted-foreground italic">{aiError}</p>}
+                {!aiError && aiAnswer && (
+                  <div
+                    className={cn(
+                      "prose-arc",
+                      aiLoading && "ai-streaming"
+                    )}
+                  >
+                    <Markdown text={aiAnswer} />
+                  </div>
+                )}
+                {!aiError && !aiAnswer && aiLoading && (
+                  <div className="ai-shimmer space-y-2 py-1">
+                    <div className="h-3.5 rounded bg-foreground/10 w-[88%]" />
+                    <div className="h-3.5 rounded bg-foreground/10 w-[72%]" />
+                    <div className="h-3.5 rounded bg-foreground/10 w-[80%]" />
+                  </div>
+                )}
+                {!aiExpanded && aiAnswer && !aiLoading && aiAnswer.length > 240 && (
+                  <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-interactive-soft/40 to-transparent pointer-events-none" />
+                )}
+              </div>
+              {aiAnswer && !aiLoading && aiAnswer.length > 240 && (
+                <button
+                  onClick={() => setAiExpanded((x) => !x)}
+                  className="w-full px-5 py-3 text-xs font-semibold text-interactive-deep hover:bg-interactive-soft/50 border-t border-interactive/10"
+                  aria-expanded={aiExpanded}
+                >
+                  {aiExpanded ? "Show less" : "Read full answer"}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Results list */}
+        {committedQuery && (
+          <section aria-labelledby="results-heading">
+            <div className="flex items-baseline justify-between mb-2">
+              <h2 id="results-heading" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {results.length === 0
+                  ? "No documents"
+                  : `${results.length} ${results.length === 1 ? "document" : "documents"}`}
+              </h2>
+              {!isQuestion && results.length > 0 && (
+                <span className="text-xs text-muted-foreground">Sorted by relevance</span>
+              )}
+            </div>
+
+            {results.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-card p-6 text-center">
+                <p className="text-sm text-foreground font-medium mb-1">No matches</p>
+                <p className="text-sm text-muted-foreground">
+                  Try simpler terms, remove a filter, or use <code className="font-mono">OR</code> to broaden the search.
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {results.map(({ doc, snippet }) => {
+                  const Icon = TYPE_ICON[doc.type]
+                  return (
+                    <li key={doc.id}>
+                      <button
+                        onClick={() => onNavigate?.("doctrine-detail", doc.id)}
+                        className={cn(
+                          "w-full text-left rounded-2xl bg-card border border-border p-4",
+                          "active:scale-[0.99] active:bg-muted/40 transition",
+                          "focus-visible:border-interactive"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                            <Icon className="w-4.5 h-4.5 text-foreground" aria-hidden />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {TYPE_LABEL[doc.type]}
+                              </span>
+                              <span className="text-muted-foreground/50">·</span>
+                              <span className="text-[10px] text-muted-foreground truncate">{doc.category}</span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-foreground leading-snug mb-1">
+                              {renderHighlighted(doc.title, queryTerms)}
+                            </h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                              {renderHighlighted(snippet.text, queryTerms)}
+                            </p>
+                            <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                              <span>{doc.readTime}</span>
+                              <span>·</span>
+                              <span>v{doc.version}</span>
+                              <span>·</span>
+                              <span>Updated {doc.lastUpdated}</span>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" aria-hidden />
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </div>
   )

@@ -113,12 +113,12 @@ export function DisasterScreen({ onNavigate }: DisasterScreenProps) {
                 "active:scale-[0.97] transition-all duration-200",
               )}
             >
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-                <Icon className="w-5 h-5 text-primary" />
+              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3">
+                <Icon className="w-5 h-5 text-foreground" />
               </div>
               <h3 className="text-sm font-medium text-foreground mb-0.5">{disaster.label}</h3>
               <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2">{disaster.description}</p>
-              <span className="text-[10px] text-primary font-medium">{disaster.doctrines} docs</span>
+              <span className="text-[10px] text-muted-foreground font-medium">{disaster.doctrines} documents</span>
             </button>
           )
         })}
