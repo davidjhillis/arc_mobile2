@@ -124,10 +124,41 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       .slice(0, 3)
   }, [readIds, profile.serviceAreas])
 
-  // Carousel: track which recommended card is currently centered
+  // Carousel: track which recommended card is currently centered, plus
+  // which card the user has tapped to expand (one at a time).
   const recCarouselRef = useRef<HTMLDivElement>(null)
-  const recCardRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([])
+  const recCardRefs = useRef<Array<HTMLDivElement | null>>([])
   const [activeRec, setActiveRec] = useState(0)
+  const [expandedRecId, setExpandedRecId] = useState<string | null>(null)
+
+  // Lightweight preview from the underlying doctrine content — same shape
+  // as the feed expand pattern.
+  const buildRecPreview = (id: string): { lead: string; bullets: string[] } => {
+    const doc = massCareContent[id]
+    if (!doc) return { lead: "", bullets: [] }
+    const lines = doc.content.split("\n").map((l) => l.trim())
+    let lead = ""
+    for (const line of lines) {
+      if (!line) continue
+      if (/^#{1,6}\s/.test(line)) continue
+      if (/^[-*]\s/.test(line)) continue
+      lead = line.replace(/\*\*(.+?)\*\*/g, "$1")
+      break
+    }
+    const bullets: string[] = []
+    let inList = false
+    for (const line of lines) {
+      const isBullet = /^[-*]\s+/.test(line)
+      if (isBullet) {
+        inList = true
+        bullets.push(line.replace(/^[-*]\s+/, "").replace(/\*\*(.+?)\*\*/g, "$1"))
+        if (bullets.length >= 3) break
+      } else if (inList && !line) {
+        if (bullets.length > 0) break
+      }
+    }
+    return { lead, bullets }
+  }
 
   useEffect(() => {
     const carousel = recCarouselRef.current
@@ -240,31 +271,84 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           </h2>
           <div
             ref={recCarouselRef}
-            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2"
+            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2 items-start"
             style={{ scrollSnapType: "x mandatory" }}
           >
-            {recommended.map((doc, i) => (
-              <button
-                key={doc.id}
-                ref={(el) => {
-                  recCardRefs.current[i] = el
-                }}
-                onClick={() => onNavigate("doctrine-detail", undefined, doc.id)}
-                className="snap-start shrink-0 w-[calc(100%-2.5rem)] text-left rounded-2xl bg-card border border-border p-4 hover:border-interactive/40 active:scale-[0.99] transition"
-                style={{ scrollSnapAlign: "start" }}
-              >
-                <p className="text-sm font-semibold text-foreground leading-snug mb-1">{doc.title}</p>
-                <p className="text-xs text-muted-foreground line-clamp-2">{doc.summary}</p>
-                <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
-                  <span>
-                    {doc.category} · {doc.readTime}
-                  </span>
-                  <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
-                    Read <ChevronRight className="w-3 h-3" aria-hidden />
-                  </span>
+            {recommended.map((doc, i) => {
+              const expanded = expandedRecId === doc.id
+              const preview = expanded ? buildRecPreview(doc.id) : null
+              return (
+                <div
+                  key={doc.id}
+                  ref={(el) => {
+                    recCardRefs.current[i] = el
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedRecId(expanded ? null : doc.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      setExpandedRecId(expanded ? null : doc.id)
+                    }
+                  }}
+                  className={cn(
+                    "snap-start shrink-0 w-[calc(100%-2.5rem)] cursor-pointer rounded-2xl bg-card border p-4 transition",
+                    expanded
+                      ? "border-interactive/50 shadow-md"
+                      : "border-border hover:border-interactive/40 active:scale-[0.99]"
+                  )}
+                  style={{ scrollSnapAlign: "start" }}
+                >
+                  <p className="text-sm font-semibold text-foreground leading-snug mb-1">{doc.title}</p>
+                  <p
+                    className={cn(
+                      "text-xs text-muted-foreground",
+                      expanded ? "" : "line-clamp-2"
+                    )}
+                  >
+                    {doc.summary}
+                  </p>
+
+                  {expanded && preview && (
+                    <div className="mt-3 pt-3 border-t border-border/60 space-y-2.5">
+                      {preview.lead && (
+                        <p className="text-[13px] text-foreground/90 leading-relaxed">{preview.lead}</p>
+                      )}
+                      {preview.bullets.length > 0 && (
+                        <ul className="list-disc pl-5 space-y-1 text-[12.5px] text-foreground/90">
+                          {preview.bullets.map((b, bi) => (
+                            <li key={bi}>{b}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
+                    <span>
+                      {doc.category} · {doc.readTime}
+                    </span>
+                    {expanded ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onNavigate("doctrine-detail", undefined, doc.id)
+                        }}
+                        className="inline-flex items-center gap-1 h-8 px-3 rounded-full bg-foreground text-background text-xs font-semibold active:scale-95 transition"
+                      >
+                        Open article
+                        <ChevronRight className="w-3 h-3" aria-hidden />
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
+                        Tap to preview <ChevronRight className="w-3 h-3" aria-hidden />
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
           {recommended.length > 1 && (
             <div className="flex items-center justify-center gap-1.5 mt-2" role="tablist" aria-label="Recommended pagination">
