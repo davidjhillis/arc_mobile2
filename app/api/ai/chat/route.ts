@@ -61,7 +61,7 @@ CONVERSATION FLOW:
         "X-Title": "Red Cross Doctrine App",
       },
       body: JSON.stringify({
-        model: "anthropic/claude-3.5-sonnet",
+        model: "anthropic/claude-haiku-4.5",
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,
