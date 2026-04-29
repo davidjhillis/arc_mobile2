@@ -979,49 +979,12 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             }
           }
 
-          // Parse final summary and key points
-          const lines = fullText.split("\n").filter((line: string) => line.trim())
-          const summaryLines: string[] = []
-          const keyPoints: string[] = []
-          let foundBullets = false
-
-          lines.forEach((line: string) => {
-            const trimmed = line.trim()
-            // Check for bullet points (various formats)
-            if (trimmed.match(/^[-•*]\s/) || trimmed.match(/^\d+\.\s/)) {
-              foundBullets = true
-              const cleaned = trimmed.replace(/^[-•*]\s/, "").replace(/^\d+\.\s/, "").trim()
-              if (cleaned) {
-                keyPoints.push(cleaned)
-              }
-            } else if (trimmed && !foundBullets) {
-              // Text before bullets = summary
-              summaryLines.push(trimmed)
-            } else if (trimmed && foundBullets && !trimmed.match(/^[-•*]/) && !trimmed.match(/^\d+\./)) {
-              // Additional summary text after bullets (shouldn't happen but handle it)
-              if (keyPoints.length === 0) {
-                summaryLines.push(trimmed)
-              }
-            }
-          })
-
-          // Set final parsed content
-          const finalSummary = summaryLines.join(" ").trim() || fullText.split("\n").filter((l: string) => !l.match(/^[-•*]/) && !l.match(/^\d+\./)).join(" ").trim()
-          setAiSummary(finalSummary || "Summary generated")
-          
-          if (keyPoints.length > 0) {
-            setAiKeyPoints(keyPoints)
-          } else {
-            // If no bullets found, try to extract from full text
-            const fallbackBullets = fullText.split("\n")
-              .filter((l: string) => l.trim().match(/^[-•*]/) || l.trim().match(/^\d+\./))
-              .map((l: string) => l.replace(/^[-•*]\s/, "").replace(/^\d+\.\s/, "").trim())
-              .filter((l: string) => l.length > 0)
-            
-            if (fallbackBullets.length > 0) {
-              setAiKeyPoints(fallbackBullets)
-            }
-          }
+          // Keep the full streamed text as-is; AIMarkdown renders paragraphs,
+          // bullets, and headings. Earlier post-processing was collapsing
+          // newlines into spaces and splitting bullets into a separate array,
+          // which made the summary "snap" from formatted to a wall of text.
+          setAiSummary(fullText.trim() || "Summary generated")
+          setAiKeyPoints([])
         } catch (error) {
           console.error("Failed to generate summary:", error)
           setAiSummary("Failed to generate summary. Please try again.")
