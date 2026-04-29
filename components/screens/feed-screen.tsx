@@ -763,11 +763,10 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             if (items.length === 0) return null
             return (
               <section key={b} className="mb-6">
-                <div className="sticky top-[7.5rem] z-10 -mx-4 px-4 py-2 bg-background/95 backdrop-blur-md mb-3 flex items-baseline justify-between">
+                <div className="sticky top-[7.5rem] z-10 -mx-4 px-4 py-2 bg-background/95 backdrop-blur-md mb-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {BUCKET_LABEL[b]}
                   </h3>
-                  <span className="text-[11px] text-muted-foreground">{items.length}</span>
                 </div>
                 <div className="space-y-2.5">
                   {items.map((item) => (
