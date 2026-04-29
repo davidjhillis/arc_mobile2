@@ -1,6 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
+import Link from "next/link"
+import { Palette } from "lucide-react"
 
 /**
  * DeviceFrame
@@ -83,12 +85,26 @@ export function DeviceFrame({
         </div>
       </div>
 
-      {/* Caption beside the frame (desktop only) */}
-      {label && (
-        <p className="hidden md:block text-xs font-medium text-zinc-500 dark:text-zinc-400 self-end pb-3">
-          {label}
+      {/* Side rail beside the frame (desktop only): caption + design-system link */}
+      <div className="hidden md:flex flex-col self-end pb-3 gap-3 max-w-[180px]">
+        {label && (
+          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 leading-snug">
+            {label}
+          </p>
+        )}
+        <Link
+          href="/design"
+          target="_blank"
+          rel="noopener"
+          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full bg-white text-zinc-900 text-xs font-semibold border border-zinc-200 shadow-sm hover:bg-zinc-50 active:scale-95 transition w-fit dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-700"
+        >
+          <Palette className="w-3.5 h-3.5" aria-hidden />
+          Design system
+        </Link>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+          Colors, type, and components for the staff designer review.
         </p>
-      )}
+      </div>
     </div>
   )
 }
