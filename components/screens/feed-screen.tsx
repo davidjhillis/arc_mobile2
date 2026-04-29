@@ -15,10 +15,6 @@ import {
   X,
   Plus,
   PencilLine,
-  UserCircle2,
-  ListChecks,
-  BookOpen,
-  FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -64,13 +60,6 @@ const TYPE_LABEL: Record<DoctrineContent["type"], string> = {
   standard: "Standard",
   "task-sheet": "Task Sheet",
   role: "Role",
-}
-
-const TYPE_ICON: Record<DoctrineContent["type"], typeof FileText> = {
-  overview: BookOpen,
-  standard: FileText,
-  "task-sheet": ListChecks,
-  role: UserCircle2,
 }
 
 // Synthetic change notes — gives the demo realistic "what changed" copy.
@@ -440,7 +429,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
     const isSaved = savedItems.has(item.id)
     const isDownloaded = downloadStates[item.id] === "downloaded"
     const isDownloading = downloadStates[item.id] === "downloading"
-    const Icon = TYPE_ICON[item.type]
     const personal = matchesUserRoles(item)
 
     return (
@@ -455,20 +443,15 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
         )}
       >
         <div className="p-4">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <Icon className="w-3.5 h-3.5 text-foreground" aria-hidden />
-            </span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="flex items-center gap-2 mb-2 flex-wrap text-[11px] text-muted-foreground">
+            <span className="font-semibold uppercase tracking-wide text-[10px]">
               {TYPE_LABEL[item.type]}
             </span>
             <span className="text-muted-foreground/50">·</span>
-            <span className="text-[11px] text-muted-foreground truncate min-w-0 flex-1">
+            <span className="truncate min-w-0 flex-1">
               {SECTION_LABELS[item.section] ?? item.section}
             </span>
-            <span className="text-[11px] text-muted-foreground shrink-0">
-              {timeAgo(item.publishedAt, now)}
-            </span>
+            <span className="shrink-0">{timeAgo(item.publishedAt, now)}</span>
           </div>
 
           <h3 className={cn("text-sm font-semibold leading-snug mb-1", isRead ? "text-foreground/85" : "text-foreground")}>
