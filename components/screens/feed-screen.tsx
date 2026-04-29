@@ -7,14 +7,10 @@ import {
   Check,
   BookmarkPlus,
   Bookmark,
-  Clock,
-  ChevronRight,
   Search,
   Sparkles,
   Flame,
-  TrendingUp,
   RefreshCw,
-  Eye,
   X,
   Plus,
   PencilLine,
@@ -380,18 +376,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
     }
   }, [feed, matchesUserRoles, now])
 
-  // ---- Trending: top by reads, with personalization preference ----
-  const trending = useMemo(() => {
-    return [...feed]
-      .sort((a, b) => {
-        const aPersonal = matchesUserRoles(a) ? 1 : 0
-        const bPersonal = matchesUserRoles(b) ? 1 : 0
-        if (aPersonal !== bPersonal) return bPersonal - aPersonal
-        return b.reads - a.reads
-      })
-      .slice(0, 4)
-  }, [feed, matchesUserRoles])
-
   // ---- Pull-to-refresh ----
   const onTouchStart = (e: React.TouchEvent) => {
     if (scrollRef.current && scrollRef.current.scrollTop === 0) {
@@ -514,11 +498,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
 
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{item.summary}</p>
 
-          <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Clock className="w-3 h-3" aria-hidden />
-              {item.readTime}
-            </span>
+          <div className="flex items-center justify-end">
             <div className="flex items-center gap-1.5">
               <button
                 onClick={(e) => handleDownload(item.id, e)}
@@ -622,7 +602,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
                   aria-selected={isActive}
                   onClick={() => setActiveChip(c)}
                   className={cn(
-                    "shrink-0 h-9 px-3.5 rounded-full text-sm font-medium transition",
+                    "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
                     isActive
                       ? "bg-foreground text-background"
                       : "bg-muted text-muted-foreground hover:text-foreground"
@@ -674,53 +654,6 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
           </p>
         </div>
       </div>
-
-      {/* Trending strip */}
-      {trending.length > 0 && (
-        <section className="pt-4" aria-labelledby="trending-heading">
-          <div className="flex items-baseline justify-between px-4 mb-2">
-            <h2 id="trending-heading" className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <TrendingUp className="w-3.5 h-3.5" aria-hidden /> Trending in your roles · this week
-            </h2>
-          </div>
-          <div className="-mx-4 px-4 flex gap-3 overflow-x-auto touch-scroll pb-2">
-            {trending.map((item) => {
-              const Icon = TYPE_ICON[item.type]
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => openItem(item.id)}
-                  className="snap-start shrink-0 w-[260px] text-left rounded-2xl bg-card border border-border p-3.5 active:scale-[0.99] hover:border-interactive/40 transition"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-md bg-muted flex items-center justify-center">
-                      <Icon className="w-3 h-3 text-foreground" />
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {TYPE_LABEL[item.type]}
-                    </span>
-                    <span className="text-muted-foreground/50">·</span>
-                    <span className="text-[10px] text-muted-foreground truncate flex-1">
-                      {SECTION_LABELS[item.section]}
-                    </span>
-                  </div>
-                  <h3 className="text-[13px] font-semibold text-foreground line-clamp-2 leading-snug mb-2 min-h-[2.6em]">
-                    {item.title}
-                  </h3>
-                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> {item.reads}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Bookmark className="w-3 h-3" /> {item.bookmarkers}
-                    </span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
 
       {/* Time-grouped feed */}
       <div
