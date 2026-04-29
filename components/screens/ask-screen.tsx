@@ -391,12 +391,21 @@ export const AskScreen = forwardRef<AskScreenRef, AskScreenProps>(({ initialMess
     },
   }))
 
-  // If we land here with an initialMessage, run the search
+  // If we land here with an initialMessage, run the search.
+  // Also accept a handoff from the home screen via localStorage.
   useEffect(() => {
-    if (initialMessage && initialMessage.trim()) {
-      runSearch(initialMessage)
+    let starter = initialMessage
+    try {
+      const handoff = localStorage.getItem("arc_initial_query")
+      if (!starter && handoff) {
+        starter = handoff
+        localStorage.removeItem("arc_initial_query")
+      }
+    } catch {}
+    if (starter && starter.trim()) {
+      setQuery(starter)
+      runSearch(starter)
     } else {
-      // Focus the search input on mount when empty
       setTimeout(() => inputRef.current?.focus(), 100)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
