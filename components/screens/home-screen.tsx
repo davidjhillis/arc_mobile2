@@ -348,7 +348,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             onMouseMove={onCarouselMouseMove}
             onMouseUp={onCarouselMouseEnd}
             onMouseLeave={onCarouselMouseEnd}
-            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2 items-start cursor-grab active:cursor-grabbing select-none"
+            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 py-2 items-start cursor-grab active:cursor-grabbing select-none"
             style={{ scrollSnapType: "x mandatory" }}
           >
             {recommended.map((doc, i) => {
