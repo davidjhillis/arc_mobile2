@@ -7,6 +7,7 @@ import {
   Check,
   BookmarkPlus,
   Bookmark,
+  ChevronDown,
   ChevronRight,
   Search,
   Sparkles,
@@ -177,11 +178,16 @@ type FilterChip =
   | { id: "type"; label: "Overviews"; type: DoctrineContent["type"] }
   | { id: "type"; label: "Roles"; type: DoctrineContent["type"] }
 
-const CHIPS: FilterChip[] = [
+// Always-visible top filters (the semantic ones).
+const TOP_CHIPS: FilterChip[] = [
   { id: "all", label: "All" },
   { id: "new", label: "New & Updated" },
   { id: "trending", label: "Trending" },
   { id: "yours", label: "Your roles" },
+]
+
+// Behind the "More" disclosure — narrower-use type filters.
+const MORE_CHIPS: FilterChip[] = [
   { id: "type", label: "Task Sheets", type: "task-sheet" },
   { id: "type", label: "Standards", type: "standard" },
   { id: "type", label: "Overviews", type: "overview" },
@@ -192,13 +198,15 @@ const CHIPS: FilterChip[] = [
 // quartile of the feed. We compute the threshold once per feed render.
 const TRENDING_TOP_N = 8
 
-type ActiveChip = (typeof CHIPS)[number]
+type ActiveChip = FilterChip
+const ALL_CHIPS: FilterChip[] = [...TOP_CHIPS, ...MORE_CHIPS]
 
 export function FeedScreen({ onNavigate }: FeedScreenProps) {
   const initialFeed = useMemo(() => buildFeed(), [])
   const [feed, setFeed] = useState<FeedItem[]>(initialFeed)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeChip, setActiveChip] = useState<ActiveChip>(CHIPS[0])
+  const [activeChip, setActiveChip] = useState<ActiveChip>(TOP_CHIPS[0])
+  const [showMore, setShowMore] = useState(false)
 
   // Persisted local state (downloads, saves, read history, user profile)
   const [downloadStates, setDownloadStates] = useState<Record<string, DownloadState>>({})
@@ -671,31 +679,92 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             )}
           </div>
 
-          {/* Filter chips — wrap to a second row when needed so every chip is reachable */}
-          <div className="flex flex-wrap gap-1.5 pb-2" role="tablist" aria-label="Feed filters">
-            {CHIPS.map((c, i) => {
-              const isActive =
-                c.id === "type" && "type" in c && activeChip.id === "type" && "type" in activeChip
-                  ? c.type === activeChip.type
-                  : c.id === activeChip.id
-              return (
-                <button
-                  key={`${c.id}-${i}`}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveChip(c)}
-                  className={cn(
-                    "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
-                    isActive
-                      ? "bg-foreground text-background"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
+          {/* Filter chips — top row always visible, MORE_CHIPS revealed by toggle.
+              When a hidden type filter is active, the More button gets a dot. */}
+          {(() => {
+            const isActive = (c: FilterChip) =>
+              c.id === "type" && "type" in c && activeChip.id === "type" && "type" in activeChip
+                ? c.type === activeChip.type
+                : c.id === activeChip.id
+            const hiddenActive =
+              !showMore && activeChip.id === "type" && MORE_CHIPS.some((c) => isActive(c))
+            return (
+              <>
+                <div
+                  className="flex flex-wrap gap-1.5 pb-2"
+                  role="tablist"
+                  aria-label="Feed filters"
                 >
-                  {c.label}
-                </button>
-              )
-            })}
-          </div>
+                  {TOP_CHIPS.map((c, i) => (
+                    <button
+                      key={`top-${i}`}
+                      role="tab"
+                      aria-selected={isActive(c)}
+                      onClick={() => setActiveChip(c)}
+                      className={cn(
+                        "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
+                        isActive(c)
+                          ? "bg-foreground text-background"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowMore((s) => !s)}
+                    aria-expanded={showMore}
+                    aria-controls="more-filters"
+                    className={cn(
+                      "shrink-0 h-8 pl-3 pr-2.5 rounded-full text-[13px] font-medium transition inline-flex items-center gap-1 relative",
+                      showMore
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    More
+                    <ChevronDown
+                      className={cn("w-3.5 h-3.5 transition-transform", showMore && "rotate-180")}
+                      aria-hidden
+                    />
+                    {hiddenActive && (
+                      <span
+                        className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-interactive ring-2 ring-background"
+                        aria-label="Filter active"
+                      />
+                    )}
+                  </button>
+                </div>
+
+                {showMore && (
+                  <div
+                    id="more-filters"
+                    className="flex flex-wrap gap-1.5 pb-2 -mt-1"
+                    role="tablist"
+                    aria-label="Type filters"
+                  >
+                    {MORE_CHIPS.map((c, i) => (
+                      <button
+                        key={`more-${i}`}
+                        role="tab"
+                        aria-selected={isActive(c)}
+                        onClick={() => setActiveChip(c)}
+                        className={cn(
+                          "shrink-0 h-8 px-3 rounded-full text-[13px] font-medium transition",
+                          isActive(c)
+                            ? "bg-foreground text-background"
+                            : "bg-card border border-border text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </div>
       </header>
 
@@ -722,7 +791,7 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
         <div className="px-4 pt-2.5 pb-1">
           <button
             onClick={() => {
-              setActiveChip(CHIPS.find((c) => c.id === "new")!)
+              setActiveChip(TOP_CHIPS.find((c) => c.id === "new")!)
               scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })
             }}
             className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground active:scale-95 transition"
