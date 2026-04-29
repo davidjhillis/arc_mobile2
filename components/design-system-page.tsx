@@ -637,7 +637,7 @@ export function DesignSystemPage() {
         <footer className="pt-8 pb-4 text-xs text-muted-foreground">
           <p>
             Sources: <a className="text-interactive-deep underline" href="https://www.redcross.org/lp/brand-standards.html" target="_blank" rel="noreferrer">ARC Brand Standards</a>{" "}
-            · brand questions go to <code className="font-mono text-foreground">BrandID@redcross.org</code>
+            · design questions: <a className="font-mono text-interactive-deep underline" href="mailto:dhillis@ingeniux.com">dhillis@ingeniux.com</a>
           </p>
         </footer>
       </main>
