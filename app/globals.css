@@ -315,6 +315,37 @@
 }
 
 /*
+  DeviceFrame: desktop-only iPhone-style chrome.
+  - On <768px viewports the frame is invisible — the app renders edge-to-edge.
+  - On ≥768px the screen container takes a fixed pixel size, becomes the
+    containing block for any `position: fixed` descendants (transform-gpu),
+    and any `min-h-dvh` / `min-h-screen` inside is clamped to 100% so the
+    AppShell fills the phone screen instead of the desktop window.
+*/
+@media (min-width: 768px) {
+  .device-shell {
+    position: relative;
+  }
+  .device-screen {
+    width: var(--device-w, 393px);
+    height: var(--device-h, 852px);
+  }
+  /* Make the AppShell honour the fixed phone height instead of the window */
+  .device-screen .min-h-dvh,
+  .device-screen .min-h-screen,
+  .device-screen .h-dvh,
+  .device-screen .h-screen {
+    min-height: 100% !important;
+    height: 100% !important;
+  }
+  /* The AppShell's outer wrapper uses max-w-lg mx-auto; force it to fill
+     the phone screen width so layout doesn't shift inside the frame. */
+  .device-screen > * {
+    max-width: 100% !important;
+  }
+}
+
+/*
   Long-form prose treatment for doctrine articles.
   Tuned for reading on a phone — 17px body, 1.65 leading, generous block
   spacing, distinct heading rhythm, and recognisable callout treatments for

@@ -1,5 +1,10 @@
 import { AppShell } from "@/components/app-shell"
+import { DeviceFrame } from "@/components/device-frame"
 
 export default function Home() {
-  return <AppShell />
+  return (
+    <DeviceFrame>
+      <AppShell />
+    </DeviceFrame>
+  )
 }
