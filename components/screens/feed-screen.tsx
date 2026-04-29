@@ -589,8 +589,8 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
             )}
           </div>
 
-          {/* Sticky filter chips */}
-          <div className="-mx-4 px-4 flex gap-2 overflow-x-auto touch-scroll pb-2" role="tablist" aria-label="Feed filters">
+          {/* Filter chips — wrap to a second row when needed so every chip is reachable */}
+          <div className="flex flex-wrap gap-1.5 pb-2" role="tablist" aria-label="Feed filters">
             {CHIPS.map((c, i) => {
               const isActive =
                 c.id === "type" && "type" in c && activeChip.id === "type" && "type" in activeChip
