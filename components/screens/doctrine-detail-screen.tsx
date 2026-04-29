@@ -1060,55 +1060,98 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   }
 
   const AIMarkdown = ({ text }: { text: string }) => {
-    const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/)
-    return (
-      <div className="prose-arc-ai">
-        {blocks.map((block, bi) => {
-          const lines = block.split("\n").filter((l) => l.length > 0)
-          if (lines.length === 0) return null
-          // Heading (## / ###)
-          if (/^#{2,3}\s+/.test(lines[0]) && lines.length === 1) {
-            const level = lines[0].startsWith("###") ? 3 : 2
-            const text = lines[0].replace(/^#{2,3}\s+/, "")
-            return level === 2 ? (
-              <h3 key={bi}>{text}</h3>
-            ) : (
-              <h4 key={bi}>{text}</h4>
-            )
-          }
-          // List
-          if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
-            return (
-              <ul key={bi}>
-                {lines.map((l, li) => (
-                  <li key={li}>{renderInlineSpans(l.replace(/^\s*[-*]\s+/, ""), `${bi}-${li}`)}</li>
-                ))}
-              </ul>
-            )
-          }
-          if (lines.every((l) => /^\s*\d+\.\s+/.test(l))) {
-            return (
-              <ol key={bi}>
-                {lines.map((l, li) => (
-                  <li key={li}>{renderInlineSpans(l.replace(/^\s*\d+\.\s+/, ""), `${bi}-${li}`)}</li>
-                ))}
-              </ol>
-            )
-          }
-          // Paragraph
-          return (
-            <p key={bi}>
-              {lines.map((l, li) => (
-                <span key={li}>
-                  {renderInlineSpans(l, `${bi}-${li}`)}
-                  {li < lines.length - 1 && <br />}
-                </span>
-              ))}
-            </p>
-          )
-        })}
-      </div>
-    )
+    const out: React.ReactNode[] = []
+    const lines = text.replace(/\r\n/g, "\n").split("\n")
+    let key = 0
+
+    type ListBuf = { kind: "ul" | "ol"; items: string[] }
+    let list: ListBuf | null = null
+    let para: string[] = []
+
+    const flushList = () => {
+      if (!list) return
+      const Tag = list.kind
+      const items = list.items
+      const k = key++
+      out.push(
+        <Tag key={`${Tag}-${k}`}>
+          {items.map((s, i) => (
+            <li key={i}>{renderInlineSpans(s, `${Tag}-${k}-${i}`)}</li>
+          ))}
+        </Tag>
+      )
+      list = null
+    }
+
+    const flushPara = () => {
+      if (para.length === 0) return
+      const k = key++
+      const linesCopy = para.slice()
+      out.push(
+        <p key={`p-${k}`}>
+          {linesCopy.map((l, i) => (
+            <span key={i}>
+              {renderInlineSpans(l, `p-${k}-${i}`)}
+              {i < linesCopy.length - 1 && <br />}
+            </span>
+          ))}
+        </p>
+      )
+      para = []
+    }
+
+    for (const raw of lines) {
+      const line = raw.replace(/\s+$/, "")
+      if (line.trim() === "") {
+        flushList()
+        flushPara()
+        continue
+      }
+      // Heading (## / ###)
+      const headingMatch = line.match(/^(#{2,3})\s+(.*)$/)
+      if (headingMatch) {
+        flushList()
+        flushPara()
+        const level = headingMatch[1].length // 2 or 3
+        const content = headingMatch[2]
+        const k = key++
+        if (level === 2) {
+          out.push(<h3 key={`h3-${k}`}>{renderInlineSpans(content, `h3-${k}`)}</h3>)
+        } else {
+          out.push(<h4 key={`h4-${k}`}>{renderInlineSpans(content, `h4-${k}`)}</h4>)
+        }
+        continue
+      }
+      // Bullet list
+      const bulletMatch = line.match(/^\s*[-*]\s+(.*)$/)
+      if (bulletMatch) {
+        flushPara()
+        if (!list || list.kind !== "ul") {
+          flushList()
+          list = { kind: "ul", items: [] }
+        }
+        list.items.push(bulletMatch[1])
+        continue
+      }
+      // Ordered list
+      const numMatch = line.match(/^\s*\d+\.\s+(.*)$/)
+      if (numMatch) {
+        flushPara()
+        if (!list || list.kind !== "ol") {
+          flushList()
+          list = { kind: "ol", items: [] }
+        }
+        list.items.push(numMatch[1])
+        continue
+      }
+      // Continuation of a list item (indented under bullet)? Treat as paragraph for now.
+      flushList()
+      para.push(line.trim())
+    }
+    flushList()
+    flushPara()
+
+    return <div className="prose-arc-ai">{out}</div>
   }
 
   // Build the canonical share URL (used by every share option)
