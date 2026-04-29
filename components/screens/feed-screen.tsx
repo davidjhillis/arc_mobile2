@@ -7,6 +7,7 @@ import {
   Check,
   BookmarkPlus,
   Bookmark,
+  ChevronRight,
   Search,
   Sparkles,
   Flame,
@@ -634,26 +635,30 @@ export function FeedScreen({ onNavigate }: FeedScreenProps) {
         />
       </div>
 
-      {/* Activity ribbon */}
-      <div className="px-4 pt-3">
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-card border border-border">
-          <span className="w-7 h-7 rounded-lg bg-interactive/10 flex items-center justify-center shrink-0">
-            <Flame className="w-3.5 h-3.5 text-interactive" aria-hidden />
-          </span>
-          <p className="text-[13px] text-foreground leading-snug">
-            <span className="font-semibold">{activityStats.changedThisWeek}</span> docs changed this week
-            {activityStats.affectingYou > 0 && (
-              <>
-                {" "}
-                ·{" "}
-                <span className="font-semibold text-interactive-deep">
-                  {activityStats.affectingYou} affect your roles
-                </span>
-              </>
-            )}
-          </p>
+      {/* Activity ribbon — tap to filter, then scroll to top */}
+      {activityStats.changedThisWeek > 0 && (
+        <div className="px-4 pt-2.5 pb-1">
+          <button
+            onClick={() => {
+              setActiveChip(CHIPS.find((c) => c.id === "new")!)
+              scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+            }}
+            className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground active:scale-95 transition"
+          >
+            <Flame className="w-3.5 h-3.5 text-interactive shrink-0" aria-hidden />
+            <span>
+              <span className="font-semibold text-foreground">{activityStats.changedThisWeek}</span> changed this week
+              {activityStats.affectingYou > 0 && (
+                <>
+                  {" · "}
+                  <span className="font-semibold text-interactive-deep">{activityStats.affectingYou} in your roles</span>
+                </>
+              )}
+            </span>
+            <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden />
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Time-grouped feed */}
       <div
