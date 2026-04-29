@@ -862,6 +862,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [headerCondensed, setHeaderCondensed] = useState(false)
   const [aiSheetOpen, setAiSheetOpen] = useState(false)
+  const [shareState, setShareState] = useState<"idle" | "shared" | "copied" | "failed">("idle")
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [readProgress, setReadProgress] = useState(0)
@@ -1054,6 +1055,38 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
 
   const scrollToTop = () => {
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  // Share — prefer the OS share sheet on mobile, fall back to clipboard.
+  const handleShare = async () => {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${window.location.pathname}?doc=${encodeURIComponent(doctrineId ?? "")}`
+        : ""
+    const shareData = {
+      title: doctrine.title,
+      text: doctrine.summary,
+      url,
+    }
+    try {
+      if (typeof navigator !== "undefined" && typeof (navigator as Navigator & { share?: (d: ShareData) => Promise<void> }).share === "function") {
+        await (navigator as Navigator).share!(shareData)
+        setShareState("shared")
+      } else if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${doctrine.title}\n${url}`)
+        setShareState("copied")
+      } else {
+        setShareState("failed")
+      }
+    } catch (err) {
+      // AbortError when the user dismisses the share sheet — silent
+      if ((err as Error).name !== "AbortError") {
+        setShareState("failed")
+      }
+      return
+    }
+    // Auto-clear feedback
+    setTimeout(() => setShareState("idle"), 1800)
   }
 
   // Map specific H2 section titles to a callout flavor that emphasises action.
@@ -1359,10 +1392,15 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             )}
           </button>
           <button
-            aria-label="Share"
+            onClick={handleShare}
+            aria-label="Share article"
             className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-muted shrink-0"
           >
-            <Share2 className="w-5 h-5 text-foreground" />
+            {shareState === "shared" || shareState === "copied" ? (
+              <Check className="w-5 h-5 text-success" />
+            ) : (
+              <Share2 className="w-5 h-5 text-foreground" />
+            )}
           </button>
         </div>
       </header>
@@ -1498,6 +1536,29 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
         {/* Spacer for FAB / nav */}
         <div className="h-32" />
       </div>
+
+      {/* Share confirmation toast */}
+      {shareState !== "idle" && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed z-40 bottom-28 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full bg-foreground text-background text-sm font-medium shadow-lg flex items-center gap-2"
+        >
+          {shareState === "shared" && (
+            <>
+              <Check className="w-4 h-4 text-success" aria-hidden />
+              Shared
+            </>
+          )}
+          {shareState === "copied" && (
+            <>
+              <Check className="w-4 h-4 text-success" aria-hidden />
+              Link copied
+            </>
+          )}
+          {shareState === "failed" && <>Couldn't share — try again</>}
+        </div>
+      )}
 
       {/* Read-progress percentage pill — bottom right, above the nav */}
       {readProgress > 3 && (
