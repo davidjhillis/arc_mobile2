@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Search,
   Bed,
@@ -109,11 +109,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     [profile.serviceAreas]
   )
 
-  // Recommended for you — pick one unread doc that matches the user's
-  // service areas, preferring task-sheets (the actionable kind).
+  // Recommended for you — up to 3 unread docs from the user's service
+  // areas, preferring task-sheets (the actionable kind).
   const recommended = useMemo(() => {
     const readSet = new Set(readIds)
-    const candidates = Object.values(massCareContent)
+    return Object.values(massCareContent)
       .filter((d) => !readSet.has(d.id))
       .filter((d) => profile.serviceAreas.some((sa) => d.category.toLowerCase().includes(sa.toLowerCase())))
       .sort((a, b) => {
@@ -121,8 +121,45 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         const bx = b.type === "task-sheet" ? 0 : 1
         return ax - bx
       })
-    return candidates[0] ?? null
+      .slice(0, 3)
   }, [readIds, profile.serviceAreas])
+
+  // Carousel: track which recommended card is currently centered
+  const recCarouselRef = useRef<HTMLDivElement>(null)
+  const recCardRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([])
+  const [activeRec, setActiveRec] = useState(0)
+
+  useEffect(() => {
+    const carousel = recCarouselRef.current
+    if (!carousel || recommended.length <= 1) return
+    const handler = () => {
+      const center = carousel.scrollLeft + carousel.clientWidth / 2
+      let bestIdx = 0
+      let bestDist = Infinity
+      recCardRefs.current.forEach((el, i) => {
+        if (!el) return
+        const cardCenter = el.offsetLeft + el.offsetWidth / 2
+        const dist = Math.abs(cardCenter - center)
+        if (dist < bestDist) {
+          bestDist = dist
+          bestIdx = i
+        }
+      })
+      setActiveRec(bestIdx)
+    }
+    carousel.addEventListener("scroll", handler, { passive: true })
+    return () => carousel.removeEventListener("scroll", handler)
+  }, [recommended.length])
+
+  const scrollToRec = (idx: number) => {
+    const card = recCardRefs.current[idx]
+    if (card && recCarouselRef.current) {
+      recCarouselRef.current.scrollTo({
+        left: card.offsetLeft - 20, // px-5 padding
+        behavior: "smooth",
+      })
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-full bg-background pb-6">
@@ -192,27 +229,61 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </section>
       )}
 
-      {/* Recommended for you — one AI-picked unread doc that matches your areas */}
-      {recommended && (
-        <section className="px-5 mt-6" aria-labelledby="recommended-heading">
-          <h2 id="recommended-heading" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+      {/* Recommended for you — swipeable carousel of up to 3 unread docs from your areas */}
+      {recommended.length > 0 && (
+        <section className="mt-6" aria-labelledby="recommended-heading">
+          <h2
+            id="recommended-heading"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-5"
+          >
             Recommended for you
           </h2>
-          <button
-            onClick={() => onNavigate("doctrine-detail", undefined, recommended.id)}
-            className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:border-interactive/40 active:scale-[0.99] transition"
+          <div
+            ref={recCarouselRef}
+            className="flex gap-3 overflow-x-auto touch-scroll snap-x snap-mandatory px-5 pb-2"
+            style={{ scrollSnapType: "x mandatory" }}
           >
-            <p className="text-sm font-semibold text-foreground leading-snug mb-1">
-              {recommended.title}
-            </p>
-            <p className="text-xs text-muted-foreground line-clamp-2">{recommended.summary}</p>
-            <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
-              <span>{recommended.category} · {recommended.readTime}</span>
-              <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
-                Read <ChevronRight className="w-3 h-3" aria-hidden />
-              </span>
+            {recommended.map((doc, i) => (
+              <button
+                key={doc.id}
+                ref={(el) => {
+                  recCardRefs.current[i] = el
+                }}
+                onClick={() => onNavigate("doctrine-detail", undefined, doc.id)}
+                className="snap-start shrink-0 w-[calc(100%-2.5rem)] text-left rounded-2xl bg-card border border-border p-4 hover:border-interactive/40 active:scale-[0.99] transition"
+                style={{ scrollSnapAlign: "start" }}
+              >
+                <p className="text-sm font-semibold text-foreground leading-snug mb-1">{doc.title}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{doc.summary}</p>
+                <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
+                  <span>
+                    {doc.category} · {doc.readTime}
+                  </span>
+                  <span className="inline-flex items-center gap-0.5 text-interactive font-semibold">
+                    Read <ChevronRight className="w-3 h-3" aria-hidden />
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+          {recommended.length > 1 && (
+            <div className="flex items-center justify-center gap-1.5 mt-2" role="tablist" aria-label="Recommended pagination">
+              {recommended.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeRec === i}
+                  aria-label={`Go to recommendation ${i + 1}`}
+                  onClick={() => scrollToRec(i)}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    activeRec === i ? "w-5 bg-interactive" : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
+                  )}
+                />
+              ))}
             </div>
-          </button>
+          )}
         </section>
       )}
 
