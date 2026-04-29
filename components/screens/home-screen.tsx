@@ -12,7 +12,6 @@ import {
   Briefcase,
   HardHat,
   ChevronRight,
-  Sparkles,
   Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -36,12 +35,6 @@ const assignments = [
 
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=facearea&facepad=2.2&auto=format&q=80"
-
-const QUICK_PROMPTS = [
-  "Who completes a Form 215?",
-  "Brief me on closing shelter operations",
-  "What changed for Mass Care this week?",
-]
 
 const defaultProfile = {
   name: "Sarah",
@@ -116,13 +109,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     })
   }, [profile.serviceAreas])
 
-  const handleQuickPrompt = (q: string) => {
-    try {
-      localStorage.setItem("arc_initial_query", q)
-    } catch {}
-    onNavigate("ask")
-  }
-
   return (
     <div className="flex flex-col min-h-full bg-background pb-6">
       {/* Hero — compact, one line */}
@@ -153,20 +139,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             Search doctrine or ask a question
           </span>
         </button>
-      </div>
-
-      {/* Quick prompts — chips on the page, no card frame */}
-      <div className="px-5 mt-3 flex flex-wrap gap-1.5">
-        {QUICK_PROMPTS.map((q) => (
-          <button
-            key={q}
-            onClick={() => handleQuickPrompt(q)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-card border border-border text-[12px] font-medium text-foreground hover:border-interactive/40 hover:bg-interactive-soft/30 active:scale-95 transition"
-          >
-            <Sparkles className="w-3 h-3 text-interactive" aria-hidden />
-            {q}
-          </button>
-        ))}
       </div>
 
       {/* Activity — single inline line, optional */}
