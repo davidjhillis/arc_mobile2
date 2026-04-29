@@ -1202,26 +1202,6 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     return null
   }
 
-  const renderInlineSpans = (text: string, keyBase: string): React.ReactNode[] => {
-    const out: React.ReactNode[] = []
-    const re = /(\*\*[^*]+\*\*)|(`[^`]+`)/g
-    let last = 0
-    let m: RegExpExecArray | null
-    let i = 0
-    while ((m = re.exec(text))) {
-      if (m.index > last) out.push(text.slice(last, m.index))
-      const tok = m[0]
-      if (tok.startsWith("**")) {
-        out.push(<strong key={`${keyBase}-b-${i++}`}>{tok.slice(2, -2)}</strong>)
-      } else {
-        out.push(<code key={`${keyBase}-c-${i++}`}>{tok.slice(1, -1)}</code>)
-      }
-      last = m.index + tok.length
-    }
-    if (last < text.length) out.push(text.slice(last))
-    return out
-  }
-
   const renderContent = (content: string) => {
     const lines = content.trim().split("\n")
     // Group elements by H2 section. Each section can be tagged as a callout.
