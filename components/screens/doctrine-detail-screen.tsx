@@ -24,6 +24,10 @@ import {
   Info,
   Loader2,
   ArrowUp,
+  Link as LinkIcon,
+  Mail,
+  MessageCircle,
+  Printer,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -862,7 +866,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [headerCondensed, setHeaderCondensed] = useState(false)
   const [aiSheetOpen, setAiSheetOpen] = useState(false)
-  const [shareState, setShareState] = useState<"idle" | "shared" | "copied" | "failed">("idle")
+  const [shareSheetOpen, setShareSheetOpen] = useState(false)
+  const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle")
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [readProgress, setReadProgress] = useState(0)
@@ -1057,36 +1062,51 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Share — prefer the OS share sheet on mobile, fall back to clipboard.
-  const handleShare = async () => {
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${window.location.pathname}?doc=${encodeURIComponent(doctrineId ?? "")}`
-        : ""
-    const shareData = {
-      title: doctrine.title,
-      text: doctrine.summary,
-      url,
-    }
-    try {
-      if (typeof navigator !== "undefined" && typeof (navigator as Navigator & { share?: (d: ShareData) => Promise<void> }).share === "function") {
-        await (navigator as Navigator).share!(shareData)
-        setShareState("shared")
-      } else if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${doctrine.title}\n${url}`)
-        setShareState("copied")
-      } else {
-        setShareState("failed")
-      }
-    } catch (err) {
-      // AbortError when the user dismisses the share sheet — silent
-      if ((err as Error).name !== "AbortError") {
-        setShareState("failed")
-      }
-      return
-    }
-    // Auto-clear feedback
+  // Build the canonical share URL (used by every share option)
+  const buildShareUrl = () =>
+    typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}?doc=${encodeURIComponent(doctrineId ?? "")}`
+      : ""
+
+  const flashShareState = (next: "copied" | "failed") => {
+    setShareState(next)
     setTimeout(() => setShareState("idle"), 1800)
+  }
+
+  const shareCopyLink = async () => {
+    const url = buildShareUrl()
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${doctrine.title}\n${url}`)
+        flashShareState("copied")
+      } else {
+        flashShareState("failed")
+      }
+    } catch {
+      flashShareState("failed")
+    }
+    setShareSheetOpen(false)
+  }
+
+  const shareEmail = () => {
+    const url = buildShareUrl()
+    const subject = encodeURIComponent(`Red Cross doctrine: ${doctrine.title}`)
+    const body = encodeURIComponent(`${doctrine.summary}\n\n${url}`)
+    window.location.href = `mailto:?subject=${subject}&body=${body}`
+    setShareSheetOpen(false)
+  }
+
+  const shareSms = () => {
+    const url = buildShareUrl()
+    const body = encodeURIComponent(`${doctrine.title}\n${url}`)
+    // iOS uses &, Android uses ?; using ? works on both.
+    window.location.href = `sms:?body=${body}`
+    setShareSheetOpen(false)
+  }
+
+  const sharePrint = () => {
+    setShareSheetOpen(false)
+    setTimeout(() => window.print(), 250)
   }
 
   // Map specific H2 section titles to a callout flavor that emphasises action.
@@ -1392,11 +1412,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             )}
           </button>
           <button
-            onClick={handleShare}
+            onClick={() => setShareSheetOpen(true)}
             aria-label="Share article"
             className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition hover:bg-muted shrink-0"
           >
-            {shareState === "shared" || shareState === "copied" ? (
+            {shareState === "copied" ? (
               <Check className="w-5 h-5 text-success" />
             ) : (
               <Share2 className="w-5 h-5 text-foreground" />
@@ -1765,6 +1785,83 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                 </p>
               )}
             </div>
+          </div>
+        </>
+      )}
+
+      {/* Custom Share sheet — fully styled, no native OS share sheet */}
+      {shareSheetOpen && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            onClick={() => setShareSheetOpen(false)}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share article"
+            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl"
+          >
+            <div className="pt-2 pb-3">
+              <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
+              <div className="flex items-center justify-between px-5 mb-1">
+                <h2 className="text-base font-semibold text-foreground">Share</h2>
+                <button
+                  onClick={() => setShareSheetOpen(false)}
+                  aria-label="Close"
+                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted active:scale-95 transition"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground px-5 line-clamp-2">{doctrine.title}</p>
+            </div>
+
+            <div className="px-3 pb-3">
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={shareCopyLink}
+                  className="flex flex-col items-center gap-2 py-3 rounded-2xl hover:bg-muted active:scale-95 transition"
+                >
+                  <span className="w-12 h-12 rounded-full bg-interactive-soft/50 flex items-center justify-center">
+                    <LinkIcon className="w-5 h-5 text-interactive" aria-hidden />
+                  </span>
+                  <span className="text-[11px] font-medium text-foreground">Copy link</span>
+                </button>
+                <button
+                  onClick={shareEmail}
+                  className="flex flex-col items-center gap-2 py-3 rounded-2xl hover:bg-muted active:scale-95 transition"
+                >
+                  <span className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-foreground" aria-hidden />
+                  </span>
+                  <span className="text-[11px] font-medium text-foreground">Email</span>
+                </button>
+                <button
+                  onClick={shareSms}
+                  className="flex flex-col items-center gap-2 py-3 rounded-2xl hover:bg-muted active:scale-95 transition"
+                >
+                  <span className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <MessageCircle className="w-5 h-5 text-foreground" aria-hidden />
+                  </span>
+                  <span className="text-[11px] font-medium text-foreground">Message</span>
+                </button>
+                <button
+                  onClick={sharePrint}
+                  className="flex flex-col items-center gap-2 py-3 rounded-2xl hover:bg-muted active:scale-95 transition"
+                >
+                  <span className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <Printer className="w-5 h-5 text-foreground" aria-hidden />
+                  </span>
+                  <span className="text-[11px] font-medium text-foreground">Print</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom-safe-area spacer for iOS home indicator */}
+            <div className="h-6" />
           </div>
         </>
       )}
