@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Bell,
   BellOff,
@@ -22,9 +22,11 @@ import {
   Info,
   HelpCircle,
   Pencil,
+  Camera,
   Check,
   X,
   Vibrate,
+  RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -33,7 +35,10 @@ interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void
 }
 
-const userProfile = {
+const DEFAULT_AVATAR =
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=facearea&facepad=2.2&auto=format&q=80"
+
+const defaultProfile = {
   name: "Sarah Johnson",
   email: "sarah.johnson@redcross.org",
   chapter: "Greater Metro Chapter",
@@ -44,8 +49,7 @@ const userProfile = {
 }
 
 // ---------------------------------------------------------------------------
-// Switch — mobile-friendly toggle (44pt tap target, large thumb, Pacific Blue
-// when on). Use for boolean settings.
+// Switch — mobile-friendly toggle (44pt tap target).
 // ---------------------------------------------------------------------------
 function Switch({
   checked,
@@ -82,7 +86,9 @@ function Switch({
   )
 }
 
-// Row primitive used everywhere in the settings list. Always 56px tall.
+// Settings row primitive. Pass `onClick` only if the row actually leads
+// somewhere — otherwise the chevron is omitted so we never advertise
+// affordances that don't exist.
 function Row({
   icon: Icon,
   label,
@@ -119,7 +125,7 @@ function Row({
         <p className={cn("text-[15px] font-medium", destructive ? "text-primary" : "text-foreground")}>
           {label}
         </p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{description}</p>}
+        {description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{description}</p>}
       </div>
       {trailing}
     </Comp>
@@ -148,8 +154,23 @@ function Group({ title, children }: { title?: string; children: React.ReactNode 
 type ThemeChoice = "light" | "dark" | "system"
 type TextScale = "compact" | "default" | "large"
 
+const TEXT_SCALE_VALUES: Record<TextScale, string> = {
+  compact: "0.92",
+  default: "1",
+  large: "1.15",
+}
+
 export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
-  // Persisted settings — localStorage so toggles survive across sessions.
+  // --- Identity (editable) ---
+  const [profile, setProfile] = useState(defaultProfile)
+  const [avatarUrl, setAvatarUrl] = useState<string>(DEFAULT_AVATAR)
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [draftName, setDraftName] = useState(defaultProfile.name)
+  const [draftEmail, setDraftEmail] = useState(defaultProfile.email)
+  const [draftChapter, setDraftChapter] = useState(defaultProfile.chapter)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // --- Settings ---
   const [notifEnabled, setNotifEnabled] = useState(false)
   const [notifNew, setNotifNew] = useState(true)
   const [notifUpdates, setNotifUpdates] = useState(true)
@@ -161,11 +182,22 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const [textScale, setTextScale] = useState<TextScale>("default")
   const [storageUsed, setStorageUsed] = useState<string | null>(null)
   const [installEvent, setInstallEvent] = useState<Event | null>(null)
-  const [editingProfile, setEditingProfile] = useState(false)
+  const [savedToast, setSavedToast] = useState(false)
 
-  // Hydrate from localStorage + check notification permission
+  // Hydrate everything from localStorage on first mount
   useEffect(() => {
     try {
+      const rawProfile = localStorage.getItem("arc_profile")
+      if (rawProfile) {
+        const p = JSON.parse(rawProfile)
+        setProfile((curr) => ({ ...curr, ...p }))
+        if (p.name) setDraftName(p.name)
+        if (p.email) setDraftEmail(p.email)
+        if (p.chapter) setDraftChapter(p.chapter)
+      }
+      const rawAvatar = localStorage.getItem("arc_profile_avatar")
+      if (rawAvatar) setAvatarUrl(rawAvatar)
+
       const raw = localStorage.getItem("arc_profile_settings")
       if (raw) {
         const s = JSON.parse(raw)
@@ -184,7 +216,6 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       setNotifPermission(Notification.permission)
     }
 
-    // Storage estimate
     if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
       navigator.storage.estimate().then((est) => {
         if (est.usage != null) {
@@ -194,7 +225,6 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       })
     }
 
-    // PWA install prompt
     const handler = (e: Event) => {
       e.preventDefault()
       setInstallEvent(e)
@@ -203,7 +233,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     return () => window.removeEventListener("beforeinstallprompt", handler)
   }, [])
 
-  // Persist settings whenever any toggle changes
+  // Persist settings whenever they change
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -222,7 +252,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     } catch {}
   }, [notifEnabled, notifNew, notifUpdates, notifDeployments, autoDownload, haptics, theme, textScale])
 
-  // Theme application
+  // Apply theme class
   useEffect(() => {
     if (typeof document === "undefined") return
     const root = document.documentElement
@@ -231,19 +261,74 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     } else if (theme === "light") {
       root.classList.remove("dark")
     } else {
-      // system
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-      root.classList.toggle("dark", isDark)
+      root.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches)
     }
   }, [theme])
 
-  // Text scale → CSS variable
+  // Apply text scale to root — all rem-based sizes cascade.
   useEffect(() => {
     if (typeof document === "undefined") return
-    const map: Record<TextScale, string> = { compact: "0.94", default: "1", large: "1.10" }
-    document.documentElement.style.setProperty("--text-scale", map[textScale])
+    document.documentElement.style.setProperty("--text-scale", TEXT_SCALE_VALUES[textScale])
   }, [textScale])
 
+  // ---------- Avatar ----------
+  const openAvatarPicker = () => fileInputRef.current?.click()
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      alert("Please choose an image file")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image is too large. Choose one under 5 MB.")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : null
+      if (result) {
+        setAvatarUrl(result)
+        try {
+          localStorage.setItem("arc_profile_avatar", result)
+        } catch {
+          // localStorage may reject huge data URLs — fall back to in-memory only
+        }
+        if (haptics && navigator.vibrate) navigator.vibrate(10)
+      }
+    }
+    reader.readAsDataURL(file)
+    // Reset so the same file can be picked again later
+    e.target.value = ""
+  }
+
+  const resetAvatar = () => {
+    setAvatarUrl(DEFAULT_AVATAR)
+    try {
+      localStorage.removeItem("arc_profile_avatar")
+    } catch {}
+  }
+
+  // ---------- Profile edit ----------
+  const handleSaveProfile = () => {
+    const next = {
+      ...profile,
+      name: draftName.trim() || profile.name,
+      email: draftEmail.trim() || profile.email,
+      chapter: draftChapter.trim() || profile.chapter,
+    }
+    setProfile(next)
+    try {
+      localStorage.setItem("arc_profile", JSON.stringify(next))
+    } catch {}
+    setEditingProfile(false)
+    setSavedToast(true)
+    if (haptics && navigator.vibrate) navigator.vibrate(10)
+    setTimeout(() => setSavedToast(false), 1800)
+  }
+
+  // ---------- Notifications ----------
   const requestNotificationPermission = async () => {
     if (typeof Notification === "undefined") return
     if (Notification.permission === "granted") {
@@ -254,7 +339,6 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     setNotifPermission(result)
     if (result === "granted") {
       setNotifEnabled(true)
-      // Tap haptic if available
       if (haptics && navigator.vibrate) navigator.vibrate(10)
       try {
         new Notification("Notifications enabled", {
@@ -268,18 +352,17 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
 
   const handleNotifToggle = (next: boolean) => {
     if (next) {
-      // Request permission on the way ON
       requestNotificationPermission()
     } else {
       setNotifEnabled(false)
     }
   }
 
+  // ---------- Cache ----------
   const handleClearCache = async () => {
     if (!confirm("Clear all cached doctrine, AI summaries, and search history?")) return
     try {
       localStorage.removeItem("arc_recent_searches")
-      // Clear any tts_audio_* entries
       Object.keys(localStorage).forEach((k) => {
         if (k.startsWith("tts_audio_")) localStorage.removeItem(k)
       })
@@ -287,7 +370,6 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         const keys = await caches.keys()
         await Promise.all(keys.map((k) => caches.delete(k)))
       }
-      // Re-run the storage estimate
       if (navigator.storage?.estimate) {
         const est = await navigator.storage.estimate()
         if (est.usage != null) {
@@ -298,6 +380,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     } catch {}
   }
 
+  // ---------- PWA install ----------
   const handleInstall = async () => {
     if (!installEvent) return
     const e = installEvent as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
@@ -308,52 +391,67 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
 
   return (
     <div className="flex flex-col min-h-full bg-muted/30 pb-4">
+      {/* Hidden file input drives the avatar picker */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={handleAvatarChange}
+      />
+
       {/* Hero */}
       <header className="px-5 pt-14 pb-6 bg-background border-b border-border">
         <div className="flex items-start gap-4 mb-5">
+          {/* Tappable avatar — opens file picker, with overlaid camera affordance */}
           <button
-            onClick={() => setEditingProfile(!editingProfile)}
-            className="relative w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-card shadow-sm shrink-0 group"
-            aria-label="Edit profile photo"
+            onClick={openAvatarPicker}
+            className="relative w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-card shadow-sm shrink-0 group active:scale-95 transition"
+            aria-label="Change profile photo"
           >
-            <img
-              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=facearea&facepad=2.2&auto=format&q=80"
-              alt={userProfile.name}
-              className="w-full h-full object-cover"
-            />
-            <span className="absolute inset-x-0 bottom-0 h-7 bg-foreground/55 backdrop-blur-sm flex items-center justify-center">
-              <Pencil className="w-3.5 h-3.5 text-background" />
+            <img src={avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
+            <span className="absolute inset-x-0 bottom-0 h-7 bg-foreground/55 backdrop-blur-sm flex items-center justify-center gap-1 text-background text-[10px] font-semibold">
+              <Camera className="w-3 h-3" />
+              Change
             </span>
           </button>
           <div className="flex-1 min-w-0 pt-0.5">
-            <h1 className="text-xl font-semibold text-foreground truncate">{userProfile.name}</h1>
-            <p className="text-sm text-muted-foreground truncate">{userProfile.email}</p>
+            <h1 className="text-xl font-semibold text-foreground truncate">{profile.name}</h1>
+            <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
             <p className="text-xs text-muted-foreground truncate mt-1 inline-flex items-center gap-1">
-              <MapPin className="w-3 h-3" aria-hidden /> {userProfile.chapter}
+              <MapPin className="w-3 h-3" aria-hidden /> {profile.chapter}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Volunteer since {userProfile.joinedAt}
-            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Volunteer since {profile.joinedAt}</p>
           </div>
         </div>
+
+        {avatarUrl !== DEFAULT_AVATAR && (
+          <button
+            onClick={resetAvatar}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-4"
+          >
+            <RotateCcw className="w-3 h-3" /> Reset photo
+          </button>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-muted px-3 py-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5 flex items-center gap-1">
               <Briefcase className="w-3 h-3" aria-hidden /> Positions
             </p>
-            <p className="text-[13px] font-medium text-foreground">{userProfile.positions.length} active</p>
+            <p className="text-[13px] font-medium text-foreground">{profile.positions.length} active</p>
           </div>
           <div className="rounded-xl bg-muted px-3 py-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5 flex items-center gap-1">
-              <Bookmark className="w-3 h-3" aria-hidden /> Bookmarks
+              <MapPin className="w-3 h-3" aria-hidden /> Region
             </p>
-            <p className="text-[13px] font-medium text-foreground">12 saved</p>
+            <p className="text-[13px] font-medium text-foreground truncate">{profile.region}</p>
           </div>
         </div>
       </header>
 
-      {/* PWA install prompt — only shows when the browser fired the event */}
+      {/* PWA install prompt */}
       {installEvent && (
         <section className="px-5 pt-4">
           <button
@@ -372,21 +470,17 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         </section>
       )}
 
-      {/* Roles & areas */}
+      {/* Roles & areas — display only for now (data comes from ARC) */}
       <Group title="Roles & service areas">
         <Row
           icon={Briefcase}
           label="Positions"
-          description={userProfile.positions.join(", ")}
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
+          description={profile.positions.join(" · ")}
         />
         <Row
           icon={MapPin}
           label="Service areas"
-          description={userProfile.serviceAreas.join(", ")}
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
+          description={profile.serviceAreas.join(" · ")}
         />
       </Group>
 
@@ -416,10 +510,8 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             <Row
               icon={BookOpen}
               label="New doctrine"
-              description="When a Task Sheet you'd care about is added"
-              trailing={
-                <Switch checked={notifNew} onChange={setNotifNew} label="New doctrine notifications" />
-              }
+              description="Task Sheets relevant to your roles"
+              trailing={<Switch checked={notifNew} onChange={setNotifNew} label="New doctrine notifications" />}
             />
             <Row
               icon={Pencil}
@@ -451,7 +543,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           icon={theme === "dark" ? Moon : theme === "light" ? Sun : Smartphone}
           label="Theme"
           trailing={
-            <div className="flex items-center gap-1 bg-muted rounded-full p-0.5">
+            <div className="flex items-center gap-0.5 bg-muted rounded-full p-0.5">
               {(["light", "system", "dark"] as ThemeChoice[]).map((opt) => (
                 <button
                   key={opt}
@@ -471,19 +563,25 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         <Row
           icon={Type}
           label="Text size"
+          description={
+            textScale === "compact" ? "Smaller (92%)" : textScale === "large" ? "Larger (115%)" : "System default"
+          }
           trailing={
-            <div className="flex items-center gap-1 bg-muted rounded-full p-0.5">
+            <div className="flex items-center gap-0.5 bg-muted rounded-full p-0.5">
               {(["compact", "default", "large"] as TextScale[]).map((opt) => (
                 <button
                   key={opt}
                   onClick={() => setTextScale(opt)}
                   aria-pressed={textScale === opt}
                   className={cn(
-                    "px-2.5 py-1 rounded-full text-[11px] font-semibold transition",
-                    textScale === opt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                    "h-7 w-9 rounded-full font-semibold transition",
+                    textScale === opt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+                    opt === "compact" && "text-[11px]",
+                    opt === "default" && "text-[13px]",
+                    opt === "large" && "text-[15px]"
                   )}
                 >
-                  {opt === "compact" ? "S" : opt === "default" ? "M" : "L"}
+                  Aa
                 </button>
               ))}
             </div>
@@ -502,7 +600,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         <Row
           icon={Wifi}
           label="Auto-download on Wi-Fi"
-          description="Save the docs you've bookmarked for offline access"
+          description="Save bookmarked docs for offline access"
           trailing={<Switch checked={autoDownload} onChange={setAutoDownload} label="Auto-download" />}
         />
         <Row
@@ -517,42 +615,24 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           label="Clear cache"
           description="Removes saved doctrine, search history, and TTS audio"
           onClick={handleClearCache}
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-        />
-      </Group>
-
-      {/* Reading */}
-      <Group title="Reading">
-        <Row
-          icon={Bookmark}
-          label="Bookmarks"
-          description="12 saved articles"
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
-        />
-        <Row
-          icon={BookOpen}
-          label="Reading history"
-          description="What you've opened recently"
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
+          destructive
         />
       </Group>
 
       {/* Account */}
       <Group title="Account">
-        <Row
-          icon={Mail}
-          label="Email"
-          description={userProfile.email}
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
-        />
+        <Row icon={Mail} label="Email" description={profile.email} />
         <Row
           icon={Pencil}
           label="Edit profile"
+          description="Update name, email, or chapter"
           trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => setEditingProfile(true)}
+          onClick={() => {
+            setDraftName(profile.name)
+            setDraftEmail(profile.email)
+            setDraftChapter(profile.chapter)
+            setEditingProfile(true)
+          }}
         />
       </Group>
 
@@ -561,15 +641,14 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         <Row
           icon={HelpCircle}
           label="Help & feedback"
+          description="Email the doctrine team"
           trailing={<ExternalLink className="w-4 h-4 text-muted-foreground" />}
           onClick={() => window.open("mailto:doctrine-feedback@redcross.org", "_blank")}
         />
         <Row
           icon={Info}
-          label="About Red Cross Doctrine"
+          label="About this app"
           description="Version 1.0 · Build 2026.04"
-          trailing={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          onClick={() => {}}
         />
       </Group>
 
@@ -585,10 +664,21 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       </section>
 
       <p className="text-center text-[11px] text-muted-foreground mt-3 mb-2">
-        Red Cross Doctrine · v1.0 · {userProfile.region}
+        Red Cross Doctrine · v1.0
       </p>
 
-      {/* Edit profile modal */}
+      {/* Saved toast */}
+      {savedToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed z-50 top-20 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-card border border-border shadow-md text-[13px] font-medium text-foreground"
+        >
+          <Check className="w-3.5 h-3.5 text-success" aria-hidden /> Profile saved
+        </div>
+      )}
+
+      {/* Edit profile modal — saves to localStorage */}
       {editingProfile && (
         <>
           <button
@@ -603,48 +693,78 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             aria-label="Edit profile"
             className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85%] overflow-y-auto"
           >
-            <div className="sticky top-0 bg-card pt-2 pb-3 border-b border-border">
+            <div className="sticky top-0 z-10 bg-card pt-2 pb-3 border-b border-border">
               <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
               <div className="flex items-center justify-between px-5">
                 <h2 className="text-base font-semibold text-foreground">Edit profile</h2>
                 <button
                   onClick={() => setEditingProfile(false)}
                   aria-label="Close"
-                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted active:scale-95 transition"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-muted active:scale-95 transition text-foreground text-xs font-semibold"
                 >
-                  <X className="w-4 h-4 text-muted-foreground" />
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
                 </button>
               </div>
             </div>
+
             <div className="px-5 py-5 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Profile details sync from your American Red Cross account. Changes here update locally for the
-                demo.
-              </p>
+              {/* Avatar in the edit sheet */}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={openAvatarPicker}
+                  className="relative w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-card shadow-sm shrink-0 active:scale-95 transition"
+                >
+                  <img src={avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
+                  <span className="absolute inset-x-0 bottom-0 h-7 bg-foreground/55 backdrop-blur-sm flex items-center justify-center gap-1 text-background text-[10px] font-semibold">
+                    <Camera className="w-3 h-3" /> Change
+                  </span>
+                </button>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Profile photo</p>
+                  <p className="text-xs text-muted-foreground/80 leading-snug mt-1">
+                    Tap to choose a new image. Stored locally on this device.
+                  </p>
+                  {avatarUrl !== DEFAULT_AVATAR && (
+                    <button
+                      onClick={resetAvatar}
+                      className="mt-2 text-xs font-medium text-interactive hover:text-interactive-deep"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <label className="block">
                 <span className="text-xs font-medium text-muted-foreground">Display name</span>
                 <input
-                  defaultValue={userProfile.name}
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
                   className="mt-1 w-full h-11 px-4 rounded-xl bg-muted text-foreground focus:outline-none focus:ring-2 focus:ring-interactive/40"
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-muted-foreground">Email</span>
                 <input
-                  defaultValue={userProfile.email}
+                  value={draftEmail}
+                  onChange={(e) => setDraftEmail(e.target.value)}
                   type="email"
+                  inputMode="email"
                   className="mt-1 w-full h-11 px-4 rounded-xl bg-muted text-foreground focus:outline-none focus:ring-2 focus:ring-interactive/40"
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-muted-foreground">Chapter</span>
                 <input
-                  defaultValue={userProfile.chapter}
+                  value={draftChapter}
+                  onChange={(e) => setDraftChapter(e.target.value)}
                   className="mt-1 w-full h-11 px-4 rounded-xl bg-muted text-foreground focus:outline-none focus:ring-2 focus:ring-interactive/40"
                 />
               </label>
+
               <button
-                onClick={() => setEditingProfile(false)}
+                onClick={handleSaveProfile}
                 className="w-full h-12 rounded-2xl bg-foreground text-background text-sm font-semibold inline-flex items-center justify-center gap-2 active:scale-[0.99] transition"
               >
                 <Check className="w-4 h-4" /> Save changes

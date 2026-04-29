@@ -193,6 +193,14 @@
 }
 
 @layer base {
+  :root {
+    /* Multiplied into the root font-size so the user's chosen text scale
+       cascades down to every rem-based size in the app. */
+    --text-scale: 1;
+  }
+  html {
+    font-size: calc(16px * var(--text-scale));
+  }
   * {
     @apply border-border outline-ring/50;
   }
