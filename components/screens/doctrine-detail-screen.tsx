@@ -1680,7 +1680,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
             role="dialog"
             aria-modal="true"
             aria-label="AI assistance"
-            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85vh] overflow-y-auto"
+            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85%] overflow-y-auto flex flex-col"
           >
             <div className="sticky top-0 bg-card pt-2 pb-3 border-b border-border">
               <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
@@ -1741,8 +1741,10 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               {/* Summary panel */}
               {showSummary && (
                 <div className="rounded-2xl bg-interactive-soft/40 border border-interactive/15 overflow-hidden">
-                  {/* Sticky panel header with close */}
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-interactive/15 bg-interactive-soft/30">
+                  {/* Panel header — sticky inside the sheet's scroll so the close
+                      X stays reachable no matter how long the summary runs.
+                      Offset (top-[3.25rem]) clears the sheet's own sticky header. */}
+                  <div className="sticky top-[3.25rem] z-10 flex items-center justify-between px-4 py-2.5 border-b border-interactive/15 bg-interactive-soft/95 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-interactive" aria-hidden />
                       <span className="text-xs font-semibold uppercase tracking-wide text-interactive-deep">
@@ -1752,7 +1754,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                     <button
                       onClick={() => setShowSummary(false)}
                       aria-label="Close summary"
-                      className="w-8 h-8 rounded-full hover:bg-card flex items-center justify-center text-muted-foreground active:scale-95 transition"
+                      className="w-9 h-9 rounded-full bg-card/80 hover:bg-card flex items-center justify-center text-foreground active:scale-95 transition shadow-sm"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -1807,7 +1809,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
               {/* Ask AI panel */}
               {showAskAI && (
                 <div className="rounded-2xl bg-card border border-border overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                  <div className="sticky top-[3.25rem] z-10 flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/95 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
                       <MessageSquare className="w-4 h-4 text-interactive" aria-hidden />
                       <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
@@ -1817,7 +1819,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate }: DoctrineDetailS
                     <button
                       onClick={() => setShowAskAI(false)}
                       aria-label="Close ask"
-                      className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground active:scale-95 transition"
+                      className="w-9 h-9 rounded-full bg-muted/80 hover:bg-muted flex items-center justify-center text-foreground active:scale-95 transition"
                     >
                       <X className="w-4 h-4" />
                     </button>
