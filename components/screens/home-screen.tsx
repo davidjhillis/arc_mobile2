@@ -13,7 +13,6 @@ import {
   HardHat,
   ChevronRight,
   Clock,
-  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "../app-shell"
@@ -203,9 +202,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             onClick={() => onNavigate("doctrine-detail", undefined, recommended.id)}
             className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:border-interactive/40 active:scale-[0.99] transition"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-interactive inline-flex items-center gap-1 mb-1.5">
-              <Sparkles className="w-2.5 h-2.5" aria-hidden /> Picked from your areas
-            </p>
             <p className="text-sm font-semibold text-foreground leading-snug mb-1">
               {recommended.title}
             </p>
