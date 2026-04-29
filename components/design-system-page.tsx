@@ -319,14 +319,16 @@ export function DesignSystemPage() {
             <div className="rounded-xl bg-muted p-4">
               <p className="font-medium text-foreground mb-1">Brand spec: Akzidenz-Grotesk</p>
               <p className="text-muted-foreground text-[13px] leading-relaxed">
-                Used in print, packaging, and licensed digital deliverables. Inter is the open-source nearest
-                neighbor and the approved web stand-in.
+                Used in print, packaging, and licensed digital deliverables. Akzidenz is licensed and not
+                bundled with the web app.
               </p>
             </div>
             <div className="rounded-xl bg-muted p-4">
-              <p className="font-medium text-foreground mb-1">Approved fallback: Arial · Georgia</p>
+              <p className="font-medium text-foreground mb-1">Web typeface: Inter · Georgia</p>
               <p className="text-muted-foreground text-[13px] leading-relaxed">
-                Arial as the system-safe sans, Georgia for long-form serif when needed (rare in this app).
+                Inter is the open-source nearest neighbor to Akzidenz and the typeface this PWA actually
+                ships. Georgia covers long-form serif on the rare screen that needs it. Arial remains the
+                last-resort system fallback if Inter fails to load.
               </p>
             </div>
           </div>
