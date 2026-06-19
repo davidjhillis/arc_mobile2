@@ -105,7 +105,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col min-h-dvh max-w-lg mx-auto bg-background">
+    <div className="app-shell-root relative flex flex-col min-h-dvh max-w-lg mx-auto">
       <main className="flex-1 overflow-y-auto pb-20">{renderScreen()}</main>
       {isAuthenticated && activeScreen !== "login" && (
         <MobileNav activeScreen={activeScreen} onNavigate={(screen) => handleNavigate(screen)} />

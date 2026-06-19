@@ -520,3 +520,20 @@
   padding: 0.1em 0.35em;
   border-radius: 0.3rem;
 }
+
+/* Demo watermark — paints a faint diagonal "DEMO" on the AppShell background
+   so it shows through whitespace in the screens. Screens with bg-background
+   become transparent within .app-shell-root so the watermark reads through. */
+.app-shell-root {
+  background-color: var(--background);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560' viewBox='0 0 400 560'><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' transform='rotate(-30 200 280)' font-family='Inter, system-ui, sans-serif' font-weight='900' font-size='110' letter-spacing='14' fill='%23000' fill-opacity='0.07'>DEMO</text></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% auto;
+}
+.app-shell-root .bg-background {
+  background-color: transparent;
+}
+.dark .app-shell-root {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560' viewBox='0 0 400 560'><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' transform='rotate(-30 200 280)' font-family='Inter, system-ui, sans-serif' font-weight='900' font-size='110' letter-spacing='14' fill='%23fff' fill-opacity='0.09'>DEMO</text></svg>");
+}
