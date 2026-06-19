@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import {
   ArrowLeft,
   Bookmark,
@@ -1671,19 +1672,20 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
       )}
 
       {/* AI bottom sheet — opens on FAB tap, hosts both Summarize and Ask flows */}
-      {aiSheetOpen && (
+      {aiSheetOpen && createPortal(
         <>
           <button
             type="button"
             aria-hidden
             onClick={() => setAiSheetOpen(false)}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-[1px]"
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-label="AI assistance"
-            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85%] overflow-y-auto flex flex-col"
+            className="fixed inset-x-0 bottom-0 z-[90] max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl max-h-[85%] overflow-y-auto flex flex-col"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <div className="sticky top-0 z-20 bg-card pt-2 pb-3 border-b border-border shadow-sm">
               <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
@@ -1880,11 +1882,12 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
 
       {/* Custom Share sheet — fully styled, no native OS share sheet */}
-      {shareSheetOpen && (
+      {shareSheetOpen && createPortal(
         <>
           <button
             type="button"
@@ -1958,7 +1961,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
             {/* Bottom-safe-area spacer for iOS home indicator */}
             <div className="h-6" />
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
