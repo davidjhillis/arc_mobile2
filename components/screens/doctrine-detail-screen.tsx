@@ -1890,13 +1890,14 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
             type="button"
             aria-hidden
             onClick={() => setShareSheetOpen(false)}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-[1px]"
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Share article"
-            className="fixed inset-x-0 bottom-0 z-50 max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl"
+            className="fixed inset-x-0 bottom-0 z-[90] max-w-lg mx-auto bg-card rounded-t-3xl border-t border-border shadow-2xl"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <div className="pt-2 pb-3">
               <div className="mx-auto w-10 h-1.5 rounded-full bg-muted-foreground/30 mb-3" aria-hidden />
