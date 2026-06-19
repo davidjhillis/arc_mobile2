@@ -875,6 +875,14 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [readProgress, setReadProgress] = useState(0)
+  // Portal target: device-screen on desktop (so sheets stay inside the phone
+  // mockup), document.body on mobile/SSR fallback.
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setPortalTarget(
+      (document.querySelector(".device-screen") as HTMLElement | null) ?? document.body
+    )
+  }, [])
   const [showToc, setShowToc] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showSummary, setShowSummary] = useState(false)
@@ -1672,7 +1680,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
       )}
 
       {/* AI bottom sheet — opens on FAB tap, hosts both Summarize and Ask flows */}
-      {aiSheetOpen && createPortal(
+      {aiSheetOpen && portalTarget && createPortal(
         <>
           <button
             type="button"
@@ -1883,11 +1891,11 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
             </div>
           </div>
         </>,
-        document.body
+        portalTarget
       )}
 
       {/* Custom Share sheet — fully styled, no native OS share sheet */}
-      {shareSheetOpen && createPortal(
+      {shareSheetOpen && portalTarget && createPortal(
         <>
           <button
             type="button"
@@ -1962,7 +1970,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
             <div className="h-6" />
           </div>
         </>,
-        document.body
+        portalTarget
       )}
     </div>
   )
