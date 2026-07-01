@@ -15,6 +15,9 @@ import {
   Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReaderTextSize } from "@/hooks/use-reader-text-size"
+import { ReaderTextSizeButton, ReaderTextSizeSlider } from "@/components/reader-text-size-control"
+import { getCategoryColor } from "@/lib/category-colors"
 import type { Screen } from "../app-shell"
 import { massCareContent } from "@/lib/mass-care-content"
 
@@ -130,6 +133,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const recCardRefs = useRef<Array<HTMLDivElement | null>>([])
   const [activeRec, setActiveRec] = useState(0)
   const [expandedRecId, setExpandedRecId] = useState<string | null>(null)
+  const [textSizeOpen, setTextSizeOpen] = useState(false)
+  const { scale: readerScale } = useReaderTextSize()
 
   // Lightweight preview from the underlying doctrine content — same shape
   // as the feed expand pattern.
@@ -266,7 +271,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-full bg-background pb-6">
+    <div
+      className="flex flex-col min-h-full bg-background pb-6 reader-scope"
+      style={{ ["--reader-scale" as any]: readerScale }}
+    >
       {/* Hero — page title is the function; greeting demoted to subtitle */}
       <header className="flex items-end justify-between gap-3 px-5 pt-12 pb-4">
         <div className="min-w-0">
@@ -277,6 +285,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             Welcome back, {profile.name}
           </p>
         </div>
+        <ReaderTextSizeButton open={textSizeOpen} onOpenChange={setTextSizeOpen} />
         <button
           onClick={() => onNavigate("profile")}
           aria-label="Open profile"
@@ -285,12 +294,13 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           <img src={avatarUrl} alt={profile.fullName} className="w-full h-full object-cover" />
         </button>
       </header>
+      <ReaderTextSizeSlider open={textSizeOpen} />
 
       {/* Search bar — placeholder shows by example what's possible */}
       <div className="px-5">
         <button
           onClick={() => onNavigate("ask")}
-          className="w-full flex items-center gap-3 h-12 px-4 rounded-full bg-muted active:scale-[0.99] hover:bg-muted/70 transition"
+          className="w-full flex items-center gap-3 h-12 px-4 rounded-full bg-muted active:scale-[0.99] active:bg-muted/70 transition"
         >
           <Search className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
           <span className="flex-1 text-left text-muted-foreground text-[15px] truncate">
@@ -303,7 +313,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       {activitySince && (
         <button
           onClick={() => onNavigate("feed")}
-          className="mx-5 mt-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground active:scale-95 self-start"
+          className="mx-5 mt-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground active:text-foreground active:scale-95 self-start"
         >
           <span className="font-semibold text-foreground">{activitySince.changed}</span>
           <span>changed since {activitySince.since}</span>
@@ -314,7 +324,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* Continue reading — minimal list, no outer card */}
       {continueReading.length > 0 && (
         <section className="px-5 mt-6" aria-labelledby="continue-heading">
-          <h2 id="continue-heading" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          <h2 id="continue-heading" className="text-lg font-extrabold text-interactive-deep tracking-tight mb-2">
             Continue reading
           </h2>
           <div className="space-y-1">
@@ -322,10 +332,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
               <button
                 key={doc.id}
                 onClick={() => onNavigate("doctrine-detail", undefined, doc.id)}
-                className="w-full flex items-center gap-3 py-2 text-left hover:bg-muted/50 active:bg-muted rounded-xl px-2 -mx-2 transition"
+                className="w-full flex items-center gap-3 py-2 text-left active:bg-muted rounded-xl px-2 -mx-2 transition"
               >
                 <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-hidden />
-                <p className="flex-1 text-sm text-foreground truncate">{doc.title}</p>
+                <p className="flex-1 text-[15px] font-medium text-foreground truncate">{doc.title}</p>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
               </button>
             ))}
@@ -338,7 +348,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         <section className="mt-6" aria-labelledby="recommended-heading">
           <h2
             id="recommended-heading"
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-5"
+            className="text-lg font-extrabold text-interactive-deep tracking-tight mb-2 px-5"
           >
             Recommended for you
           </h2>
@@ -354,6 +364,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             {recommended.map((doc, i) => {
               const expanded = expandedRecId === doc.id
               const preview = expanded ? buildRecPreview(doc.id) : null
+              const color = getCategoryColor(doc.category)
               return (
                 <div
                   key={doc.id}
@@ -370,19 +381,28 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                     }
                   }}
                   className={cn(
-                    "snap-start shrink-0 w-[calc(100%-2.5rem)] cursor-pointer rounded-2xl bg-card border p-4 transition",
+                    "snap-start shrink-0 w-[calc(100%-2.5rem)] cursor-pointer rounded-2xl bg-card border p-4 transition shadow-sm",
                     expanded
-                      ? "border-interactive/50 shadow-md"
-                      : "border-border hover:border-interactive/40 active:scale-[0.99]"
+                      ? "border-interactive-deep/50 shadow-md"
+                      : "border-interactive-deep/20 active:border-interactive-deep/40 active:scale-[0.99]"
                   )}
                   style={{ scrollSnapAlign: "start" }}
                 >
-                  <p className="text-sm font-semibold text-foreground leading-snug mb-1 line-clamp-3 min-h-[3.75rem]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      style={{ backgroundColor: color.chipBg, color: color.chipText }}
+                    >
+                      {doc.category}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{doc.readTime}</span>
+                  </div>
+                  <p className="text-[15px] font-bold text-foreground leading-snug mb-1.5 line-clamp-3 min-h-[3.75rem]">
                     {doc.title}
                   </p>
                   <p
                     className={cn(
-                      "text-xs text-muted-foreground",
+                      "text-[13px] text-foreground/85 leading-snug",
                       expanded ? "" : "line-clamp-2"
                     )}
                   >
@@ -404,22 +424,17 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
-                    <span>
-                      {doc.category} · {doc.readTime}
-                    </span>
-                    {expanded && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onNavigate("doctrine-detail", undefined, doc.id)
-                        }}
-                        className="inline-flex items-center gap-1 h-8 px-3 rounded-full bg-foreground text-background text-xs font-semibold active:scale-95 transition"
-                      >
-                        Open article
-                        <ChevronRight className="w-3 h-3" aria-hidden />
-                      </button>
-                    )}
+                  <div className="flex items-center justify-end mt-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onNavigate("doctrine-detail", undefined, doc.id)
+                      }}
+                      className="inline-flex items-center gap-1 h-9 px-4 rounded-full bg-interactive-deep text-background text-[13px] font-semibold active:scale-95 active:bg-interactive-deep/90 transition"
+                    >
+                      Open article
+                      <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+                    </button>
                   </div>
                 </div>
               )
@@ -443,7 +458,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                     "h-1.5 rounded-full transition-all",
                     activeRec === i
                       ? "w-5 bg-interactive"
-                      : "w-1.5 bg-muted-foreground/35 hover:bg-muted-foreground/60"
+                      : "w-1.5 bg-muted-foreground/35"
                   )}
                 />
               ))}
@@ -455,22 +470,26 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* Your assignments */}
       {myAssignments.length > 0 && (
         <section className="px-5 mt-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          <h2 className="text-lg font-extrabold text-interactive-deep tracking-tight mb-2">
             Your assignments
           </h2>
           <div className="grid grid-cols-2 gap-2">
             {myAssignments.map((item) => {
               const Icon = item.icon
+              const color = getCategoryColor(item.label)
               return (
                 <button
                   key={item.id}
                   onClick={() => onNavigate("doctrine", item.id)}
-                  className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-interactive/30 hover:border-interactive/50 active:scale-[0.98] transition"
+                  className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-interactive-deep/30 shadow-sm active:border-interactive-deep/50 active:bg-interactive-soft/10 active:scale-[0.98] transition"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-interactive/10 flex items-center justify-center shrink-0">
-                    <Icon className="w-4 h-4 text-interactive" />
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: color.chipBg }}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: color.chipText }} />
                   </div>
-                  <p className="text-[13px] font-semibold text-foreground leading-snug min-w-0 truncate">
+                  <p className="text-[14px] font-semibold text-foreground leading-snug min-w-0 truncate">
                     {item.label}
                   </p>
                 </button>
@@ -482,22 +501,26 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
       {/* All other assignments */}
       <section className="px-5 mt-6">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+        <h2 className="text-lg font-extrabold text-interactive-deep tracking-tight mb-2">
           {myAssignments.length > 0 ? "All assignments" : "Browse by assignment"}
         </h2>
         <div className="grid grid-cols-2 gap-2">
           {otherAssignments.map((item) => {
             const Icon = item.icon
+            const color = getCategoryColor(item.label)
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate("doctrine", item.id)}
-                className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-border hover:border-interactive/30 active:scale-[0.98] transition"
+                className="flex items-center gap-2.5 px-3 py-3 rounded-xl text-left bg-card border border-interactive-deep/15 shadow-sm active:border-interactive-deep/40 active:bg-interactive-soft/10 active:scale-[0.98] transition"
               >
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                  <Icon className="w-4 h-4 text-foreground" />
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: color.chipBg }}
+                >
+                  <Icon className="w-5 h-5" style={{ color: color.chipText }} />
                 </div>
-                <p className="text-[13px] font-semibold text-foreground leading-snug min-w-0 truncate">
+                <p className="text-[14px] font-semibold text-foreground leading-snug min-w-0 truncate">
                   {item.label}
                 </p>
               </button>

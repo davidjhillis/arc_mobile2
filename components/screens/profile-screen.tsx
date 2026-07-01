@@ -560,33 +560,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             </div>
           }
         />
-        <Row
-          icon={Type}
-          label="Text size"
-          description={
-            textScale === "compact" ? "Smaller (92%)" : textScale === "large" ? "Larger (115%)" : "System default"
-          }
-          trailing={
-            <div className="flex items-center gap-0.5 bg-muted rounded-full p-0.5">
-              {(["compact", "default", "large"] as TextScale[]).map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => setTextScale(opt)}
-                  aria-pressed={textScale === opt}
-                  className={cn(
-                    "h-7 w-9 rounded-full font-semibold transition",
-                    textScale === opt ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-                    opt === "compact" && "text-[11px]",
-                    opt === "default" && "text-[13px]",
-                    opt === "large" && "text-[15px]"
-                  )}
-                >
-                  Aa
-                </button>
-              ))}
-            </div>
-          }
-        />
+        {/* Text size row removed — controlled in-context via the reader's Aa toggle */}
         <Row
           icon={Vibrate}
           label="Haptics"

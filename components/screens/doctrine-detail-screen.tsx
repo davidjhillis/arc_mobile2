@@ -31,6 +31,8 @@ import {
   Printer,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReaderTextSize } from "@/hooks/use-reader-text-size"
+import { ReaderTextSizeButton, ReaderTextSizeSlider } from "@/components/reader-text-size-control"
 import type { Screen } from "../app-shell"
 import type { JSX } from "react/jsx-runtime" // Import JSX to resolve undeclared variable error
 import { massCareContent } from "@/lib/mass-care-content"
@@ -893,6 +895,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
   const [askAIQuestion, setAskAIQuestion] = useState("")
   const [askAIAnswer, setAskAIAnswer] = useState("")
   const [isAskingAI, setIsAskingAI] = useState(false)
+  const { scale: readerScale } = useReaderTextSize()
+  const [textSizeOpen, setTextSizeOpen] = useState(false)
 
   const doctrine = doctrineId ? mergedDoctrineContent[doctrineId] || defaultDoctrine : defaultDoctrine
 
@@ -1469,6 +1473,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
           >
             <Sparkles className="w-5 h-5 text-interactive" />
           </button>
+          <ReaderTextSizeButton open={textSizeOpen} onOpenChange={setTextSizeOpen} />
           <button
             onClick={() => setIsBookmarked(!isBookmarked)}
             aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
@@ -1495,6 +1500,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
               <Download className="w-5 h-5 text-foreground" />
             )}
           </button>
+          {/* Share button — hidden for V1
           <button
             onClick={() => setShareSheetOpen(true)}
             aria-label="Share article"
@@ -1506,18 +1512,21 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
               <Share2 className="w-5 h-5 text-foreground" />
             )}
           </button>
+          */}
         </div>
+        <ReaderTextSizeSlider open={textSizeOpen} />
       </header>
 
       {/* Scrollable article body */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto reader-scope"
         onScroll={handleScroll}
+        style={{ ["--reader-scale" as any]: readerScale }}
       >
         {/* Hero — scrolls away when reading */}
         <div className="px-5 pt-2 pb-5">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="px-2.5 py-1 bg-muted text-foreground text-xs font-medium rounded-full">
               {doctrine.category}
             </span>
@@ -1530,7 +1539,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
           <h1 className="text-[1.75rem] leading-[1.15] font-bold text-foreground tracking-tight text-balance">
             {doctrine.title}
           </h1>
-          <div className="flex items-center gap-3 mt-4 text-sm text-muted-foreground">
+          <div className="reader-meta flex flex-wrap items-center gap-x-3 gap-y-1 mt-4 text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Clock className="w-4 h-4" aria-hidden />
               {doctrine.readTime}
@@ -1544,7 +1553,7 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
 
         {/* Lead summary */}
         <div className="px-5">
-          <p className="text-[17px] leading-[1.55] text-foreground/85 font-medium pb-5 border-b border-border">
+          <p className="reader-lead text-foreground font-medium pb-5 border-b border-border">
             {doctrine.summary}
           </p>
         </div>
@@ -1613,7 +1622,9 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
         </div>
 
         {/* Article body */}
-        <article className="prose-arc px-5 pt-6">{renderContent(doctrine.content)}</article>
+        <article className="prose-arc px-5 pt-6">
+          {renderContent(doctrine.content)}
+        </article>
 
         {/* Related — reframed for action */}
         {doctrine.relatedDocs.length > 0 && (
@@ -1641,9 +1652,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
         <div className="h-32" />
       </div>
 
-      {/* Subtle share confirmation — top-anchored, card surface, only when there's
-          something to say (the OS share sheet already confirms a real share). */}
-      {(shareState === "copied" || shareState === "failed") && (
+      {/* Subtle share confirmation — hidden for V1 */}
+      {false && (shareState === "copied" || shareState === "failed") && (
         <div
           role="status"
           aria-live="polite"
@@ -1894,8 +1904,8 @@ export function DoctrineDetailScreen({ doctrineId, onNavigate, returnTo = "doctr
         portalTarget
       )}
 
-      {/* Custom Share sheet — fully styled, no native OS share sheet */}
-      {shareSheetOpen && portalTarget && createPortal(
+      {/* Custom Share sheet — hidden for V1 */}
+      {false && shareSheetOpen && portalTarget && createPortal(
         <>
           <button
             type="button"

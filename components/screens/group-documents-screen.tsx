@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { ArrowLeft, Search, BookOpen, Sparkles, FileText, Shield, Users, Clipboard } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReaderTextSize } from "@/hooks/use-reader-text-size"
+import { ReaderTextSizeButton, ReaderTextSizeSlider } from "@/components/reader-text-size-control"
 import type { Screen } from "../app-shell"
 import { massCareContent, taskSheets } from "@/lib/mass-care-content"
 
@@ -64,6 +66,8 @@ function getDocumentType(docId: string): string {
 
 export function GroupDocumentsScreen({ subActivity, group, onNavigate }: GroupDocumentsScreenProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [textSizeOpen, setTextSizeOpen] = useState(false)
+  const { scale: readerScale } = useReaderTextSize()
 
   const phaseId = group || "operations"
   const assignmentId = subActivity || "mass-care"
@@ -116,22 +120,28 @@ export function GroupDocumentsScreen({ subActivity, group, onNavigate }: GroupDo
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => onNavigate("doctrine", assignmentId)}
-            className="w-9 h-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-95 transition-all"
+            className="w-11 h-11 rounded-xl bg-muted/50 flex items-center justify-center active:scale-95 transition-all"
           >
-            <ArrowLeft className="w-4 h-4 text-foreground" />
+            <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-medium text-foreground">{phaseLabel}</h1>
-            <p className="text-xs text-muted-foreground">{filtered.length} documents</p>
+            <h1 className="text-2xl font-extrabold text-foreground tracking-tight leading-tight">
+              {phaseLabel}
+            </h1>
+            <p className="text-[13px] text-muted-foreground mt-0.5">
+              {filtered.length} documents
+            </p>
           </div>
+          <ReaderTextSizeButton open={textSizeOpen} onOpenChange={setTextSizeOpen} />
           <button
             onClick={() => onNavigate("ask")}
             aria-label="Search doctrine"
-            className="w-9 h-9 rounded-xl bg-interactive/10 flex items-center justify-center active:scale-95 transition-all"
+            className="w-11 h-11 rounded-xl bg-interactive/10 flex items-center justify-center active:scale-95 transition-all"
           >
-            <Sparkles className="w-4 h-4 text-interactive" />
+            <Sparkles className="w-5 h-5 text-interactive" />
           </button>
         </div>
+        <ReaderTextSizeSlider open={textSizeOpen} />
 
         {/* Search */}
         <div className="relative">
@@ -153,12 +163,15 @@ export function GroupDocumentsScreen({ subActivity, group, onNavigate }: GroupDo
       </header>
 
       {/* Documents List */}
-      <div className="flex-1 px-5 pb-6 space-y-6">
+      <div
+        className="flex-1 px-5 pb-6 space-y-6 reader-scope"
+        style={{ ["--reader-scale" as any]: readerScale }}
+      >
         {sections.map((section) => {
           const Icon = getDocumentIcon(section.key)
           return (
             <div key={section.key}>
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              <h2 className="text-base font-extrabold text-interactive-deep mb-2 tracking-tight">
                 {section.label}
               </h2>
               <div className="space-y-2">
@@ -171,17 +184,21 @@ export function GroupDocumentsScreen({ subActivity, group, onNavigate }: GroupDo
                       onClick={() => onNavigate("doctrine-detail", undefined, doc.id)}
                       className={cn(
                         "w-full flex items-start gap-3 p-4 rounded-xl text-left",
-                        "bg-card border border-border",
-                        "active:scale-[0.99] transition-all duration-200",
+                        "bg-card border border-interactive-deep/20 shadow-sm",
+                        "active:border-interactive-deep/40 active:bg-interactive-soft/10 active:scale-[0.99] transition-all duration-200",
                       )}
                     >
-                      <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <DocIcon className="w-4 h-4 text-foreground" />
+                      <div className="w-10 h-10 rounded-lg bg-interactive-soft/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <DocIcon className="w-5 h-5 text-interactive-deep" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-foreground mb-1 leading-snug">{doc.title}</h3>
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{doc.summary}</p>
-                        <span className="text-xs text-muted-foreground">{doc.readTime}</span>
+                        <h3 className="reader-body font-semibold text-foreground mb-1 leading-snug">
+                          {doc.title}
+                        </h3>
+                        <p className="reader-small text-muted-foreground line-clamp-2 mb-2 leading-snug">
+                          {doc.summary}
+                        </p>
+                        <span className="reader-small text-muted-foreground">{doc.readTime}</span>
                       </div>
                     </button>
                   )

@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { ArrowLeft, Search, BookOpen, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReaderTextSize } from "@/hooks/use-reader-text-size"
+import { ReaderTextSizeButton, ReaderTextSizeSlider } from "@/components/reader-text-size-control"
 import type { Screen } from "../app-shell"
 
 interface DoctrineScreenProps {
@@ -30,6 +32,8 @@ const massCarePhases: string[] = [
 
 export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [textSizeOpen, setTextSizeOpen] = useState(false)
+  const { scale: readerScale } = useReaderTextSize()
 
   const assignmentId = disasterType || "mass-care"
   const label = assignmentLabels[assignmentId] || "Mass Care"
@@ -50,22 +54,28 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => onNavigate("home")}
-            className="w-9 h-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-95 transition-all"
+            className="w-11 h-11 rounded-xl bg-muted/50 flex items-center justify-center active:scale-95 transition-all"
           >
-            <ArrowLeft className="w-4 h-4 text-foreground" />
+            <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-medium text-foreground">{label}</h1>
-            <p className="text-xs text-muted-foreground">{filtered.length} phases</p>
+            <h1 className="text-2xl font-extrabold text-foreground tracking-tight leading-tight">
+              {label}
+            </h1>
+            <p className="text-[13px] text-muted-foreground mt-0.5">
+              {filtered.length} phases
+            </p>
           </div>
+          <ReaderTextSizeButton open={textSizeOpen} onOpenChange={setTextSizeOpen} />
           <button
             onClick={() => onNavigate("ask")}
             aria-label="Search doctrine"
-            className="w-9 h-9 rounded-xl bg-interactive/10 flex items-center justify-center active:scale-95 transition-all"
+            className="w-11 h-11 rounded-xl bg-interactive/10 flex items-center justify-center active:scale-95 transition-all"
           >
-            <Sparkles className="w-4 h-4 text-interactive" />
+            <Sparkles className="w-5 h-5 text-interactive" />
           </button>
         </div>
+        <ReaderTextSizeSlider open={textSizeOpen} />
 
         {/* Search */}
         <div className="relative">
@@ -87,7 +97,10 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
       </header>
 
       {/* Phases List */}
-      <div className="flex-1 px-5 pb-6 space-y-2">
+      <div
+        className="flex-1 px-5 pb-6 space-y-2 reader-scope"
+        style={{ ["--reader-scale" as any]: readerScale }}
+      >
         {filtered.map((phase, index) => (
           <button
             key={`${assignmentId}-${index}`}
@@ -97,15 +110,15 @@ export function DoctrineScreen({ disasterType, onNavigate }: DoctrineScreenProps
             }}
             className={cn(
               "w-full flex items-start gap-3 p-4 rounded-xl text-left",
-              "bg-card border border-border",
-              "active:scale-[0.99] transition-all duration-200",
+              "bg-card border border-interactive-deep/20 shadow-sm",
+              "active:border-interactive-deep/40 active:bg-interactive-soft/10 active:scale-[0.99] transition-all duration-200",
             )}
           >
-            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-              <BookOpen className="w-4 h-4 text-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-interactive-soft/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <BookOpen className="w-5 h-5 text-interactive-deep" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-foreground leading-snug">{phase}</h3>
+              <h3 className="reader-body font-semibold text-foreground leading-snug">{phase}</h3>
             </div>
           </button>
         ))}
